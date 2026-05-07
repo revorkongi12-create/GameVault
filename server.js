@@ -19,9 +19,11 @@ const STEAM_RETURN_URL = process.env.STEAM_RETURN_URL;
 const SESSION_SECRET = process.env.SESSION_SECRET || "gamevault-local-dev-secret";
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 const DEFAULT_CLIENT_ID = "local";
+const RECENT_AUTH_CLAIM_WINDOW_MS = 5 * 60 * 1000;
 
 const steamSchemaCache = new Map();
 const steamAppDetailsCache = new Map();
+let recentSteamAuth = null;
 const userDataPath = path.join(process.env.APPDATA || __dirname, "GameVault");
 const savedProfilePath = path.join(userDataPath, "steam-profile.json");
 const savedProfilesPath = path.join(userDataPath, "steam-profiles.json");
@@ -63,12 +65,38 @@ function getClientId(req) {
 }
 
 function getSteamProfile(req) {
-  return steamProfiles.get(getClientId(req));
+  const clientId = getClientId(req);
+
+  return steamProfiles.get(clientId) || claimRecentSteamAuth(clientId);
 }
 
 function setSteamProfile(clientId, profile) {
-  steamProfiles.set(clientId || DEFAULT_CLIENT_ID, profile);
+  const resolvedClientId = clientId || DEFAULT_CLIENT_ID;
+
+  steamProfiles.set(resolvedClientId, profile);
+  recentSteamAuth = {
+    clientId:resolvedClientId,
+    profile,
+    createdAt:Date.now()
+  };
   saveSteamProfiles();
+}
+
+function claimRecentSteamAuth(clientId) {
+  if (!clientId || clientId === DEFAULT_CLIENT_ID || !recentSteamAuth) return null;
+
+  const isFresh = Date.now() - recentSteamAuth.createdAt <= RECENT_AUTH_CLAIM_WINDOW_MS;
+
+  if (!isFresh) {
+    recentSteamAuth = null;
+    return null;
+  }
+
+  steamProfiles.set(clientId, recentSteamAuth.profile);
+  recentSteamAuth = null;
+  saveSteamProfiles();
+
+  return steamProfiles.get(clientId);
 }
 
 function clearSteamProfile(req) {
@@ -128,7 +156,11 @@ app.use(cors({
 app.use(session({
   secret:SESSION_SECRET,
   resave:false,
-  saveUninitialized:false
+  saveUninitialized:false,
+  cookie:{
+    sameSite:"lax",
+    secure:STEAM_RETURN_URL?.startsWith("https://") || false
+  }
 }));
 
 app.use(passport.initialize());
@@ -147,6 +179,18 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({
     status:"ok"
+  });
+});
+
+app.get("/debug/auth", (req, res) => {
+  const clientId = getClientId(req);
+
+  res.json({
+    clientId,
+    connected:Boolean(steamProfiles.get(clientId)),
+    storedProfiles:steamProfiles.size,
+    recentAuthAvailable:Boolean(recentSteamAuth),
+    recentAuthAgeSeconds:recentSteamAuth ? Math.round((Date.now() - recentSteamAuth.createdAt) / 1000) : null
   });
 });
 
