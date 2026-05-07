@@ -51,7 +51,7 @@ const PLACEHOLDER_APP_IDS = new Set([1145360, 620, 413150]);
 const MAX_SHOWCASE_TROPHIES = 9;
 const MAX_COMPLETED_TROPHIES = 3;
 const HARD_ACHIEVEMENT_PERCENT = 2;
-const STEAM_LEGENDARY_PERCENT = 10;
+const STEAM_LEGENDARY_PERCENT = 25;
 const ACTIVITY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_TICK_INTERVAL_MS = 30 * 1000;
 const ACTIVITY_ICONS = {
@@ -320,7 +320,7 @@ function getAchievementRarityLabel(achievement) {
 
   if (percent !== null && percent < HARD_ACHIEVEMENT_PERCENT) return "hard";
   if (percent !== null && percent <= STEAM_LEGENDARY_PERCENT) return "legendary";
-  if (percent !== null && percent <= 25) return "rare";
+  if (percent !== null && percent <= 40) return "rare";
 
   return achievement?.rarity || "common";
 }

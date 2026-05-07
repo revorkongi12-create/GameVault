@@ -1,6 +1,6 @@
 {
   "name": "gamevault",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "A Steam-powered game library and achievement showcase.",
   "author": "GameVault",
   "main": "main.js",

@@ -467,8 +467,8 @@ async function getPlayerAchievementsForApp(steamid, appid) {
 function getAchievementRarity(percent) {
   if (typeof percent !== "number") return "common";
   if (percent < 2) return "hard";
-  if (percent <= 10) return "legendary";
-  if (percent <= 25) return "rare";
+  if (percent <= 25) return "legendary";
+  if (percent <= 40) return "rare";
 
   return "common";
 }
