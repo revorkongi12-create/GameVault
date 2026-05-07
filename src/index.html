@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GameVault</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <section id="loginView" class="login-view">
+    <div class="login-bg"></div>
+
+    <div class="login-card">
+      <div class="login-logo">GameVault</div>
+
+      <h1>Your achievements deserve more than a popup.</h1>
+
+      <p>
+        Sign in with Steam to track your games, showcase trophies,
+        compare progress, and build your completionist profile.
+      </p>
+
+      <button id="loginSteamBtn" class="steam-login-btn">
+        Sign in with Steam
+      </button>
+
+      <button id="loginRefreshBtn" class="login-refresh-btn">
+        I already signed in
+      </button>
+
+      <small>
+        GameVault uses Steam login to sync your profile, library, achievements, and friends.
+      </small>
+    </div>
+  </section>
+
+  <div id="appShell" class="app hidden">
+    <aside class="sidebar">
+      <div class="logo">
+        <img src="../build/GameVault.ico" alt="" />
+        <span>GameVault</span>
+      </div>
+
+      <button id="homeBtn" class="nav-btn home">🏠 Home</button>
+      <button id="libraryBtn" class="nav-btn library">📚 Library</button>
+      <button id="achievementsBtn" class="nav-btn achievements">🏆 Achievements</button>
+      <button id="goalsBtn" class="nav-btn goals">🎯 Goals</button>
+      <button id="trophiesBtn" class="nav-btn trophies">🏅 Trophies</button>
+      <button id="friendsBtn" class="nav-btn friends">👥 Friends</button>
+      <button id="statsBtn" class="nav-btn stats">📊 Insights</button>
+      <button id="settingsBtn" class="nav-btn settings">⚙️ Settings</button>
+    </aside>
+
+    <main class="main">
+      <section id="homeView" class="view">
+        <div class="profile-command">
+          <div class="profile-bg"></div>
+
+          <div class="profile-command-content">
+            <div class="profile-identity">
+              <div class="avatar-wrapper">
+                <img id="avatarImg" src="https://via.placeholder.com/100" alt="avatar">
+                <input type="file" id="avatarInput" hidden>
+              </div>
+
+              <div>
+                <h1 id="profileName">Player</h1>
+                <p id="profileTagline">Completionist in progress</p>
+
+                <div class="xp-bar">
+                  <div id="xpFill"></div>
+                </div>
+
+                <small id="xpText">0 XP to next level</small>
+              </div>
+            </div>
+
+            <div class="profile-stats">
+              <div class="stat-box">
+                <strong id="totalHours">0h</strong>
+                <small>Total Hours</small>
+              </div>
+
+              <div class="stat-box">
+                <strong id="gamesOwned">0</strong>
+                <small>Games</small>
+              </div>
+
+              <div class="stat-box">
+                <strong id="userLevel">Lvl 1</strong>
+                <small>Level</small>
+              </div>
+
+              <div class="stat-box">
+                <strong id="achievementScore">0</strong>
+                <small>Score</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <div class="home-panel">
+            <div class="panel-title">
+              <h2>Trophy Showcase</h2>
+              <p>Your featured accomplishments.</p>
+            </div>
+
+            <div id="showcaseGrid" class="showcase-grid"></div>
+          </div>
+
+          <div class="home-panel">
+            <div class="panel-title">
+              <h2>Recent Activity</h2>
+              <p>Your latest progression moments.</p>
+            </div>
+
+            <div id="sessionLivePanel" class="session-live-panel"></div>
+            <div id="activityFeed" class="activity-feed"></div>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <h1>Recently Played</h1>
+          <p>Jump back into your latest adventure.</p>
+        </div>
+
+        <div id="homeHero"></div>
+      </section>
+
+      <section id="libraryView" class="view hidden">
+        <div class="section-title">
+          <h1>Your Library</h1>
+          <p>All your games in one place.</p>
+        </div>
+
+        <input
+          id="librarySearchInput"
+          class="library-search"
+          type="search"
+          placeholder="Search your games..."
+        />
+
+        <select id="libraryBacklogFilter" class="library-filter">
+          <option value="all">All Library</option>
+          <option value="none">No Backlog Status</option>
+          <option value="want">Want to Play</option>
+          <option value="playing">Playing</option>
+          <option value="hold">On Hold</option>
+          <option value="finished">Finished</option>
+          <option value="dropped">Dropped</option>
+        </select>
+
+        <div id="libraryGrid" class="library-grid"></div>
+      </section>
+
+      <section id="gameView" class="view hidden">
+        <div id="gameHero"></div>
+
+        <div class="dropdowns">
+          <div class="dropdown">
+            <button class="dropdown-header" data-target="achievementsPanel">🏆 Achievements</button>
+            <div id="achievementsPanel" class="dropdown-content hidden"></div>
+          </div>
+
+          <div class="dropdown">
+            <button class="dropdown-header" data-target="goalsPanel">🎯 Goals</button>
+            <div id="goalsPanel" class="dropdown-content hidden"></div>
+          </div>
+        </div>
+
+        <div id="gameFriendsPanel"></div>
+      </section>
+
+      <section id="globalAchievementsView" class="view hidden">
+        <div class="section-title">
+          <h1>Achievements</h1>
+          <p>Search a game, then open its achievement list.</p>
+        </div>
+
+        <input
+          id="achievementSearchInput"
+          class="achievement-search"
+          type="search"
+          placeholder="Search games..."
+        />
+
+        <div id="globalAchievementsContainer"></div>
+      </section>
+
+      <section id="goalsView" class="view hidden">
+        <div class="section-title">
+          <h1>Goals</h1>
+          <p>Track your objectives.</p>
+        </div>
+
+        <div class="goals-topbar">
+          <button id="openGoalModalBtn" class="primary-btn">+ Add Goal</button>
+
+          <select id="goalFilter" class="goal-filter">
+            <option value="all">All Goals</option>
+            <option value="global">Global</option>
+          </select>
+        </div>
+
+        <div id="goalsList" class="goals-list"></div>
+      </section>
+
+      <section id="trophiesView" class="view hidden">
+        <div class="section-title">
+          <h1>Trophies</h1>
+          <p>Build the showcase that appears on your Home page.</p>
+        </div>
+
+        <div class="trophy-manager">
+          <div class="trophy-form">
+            <h2>Add Showcase Trophy</h2>
+
+            <label for="trophyType">Trophy Type</label>
+            <select id="trophyType">
+              <option value="completed">Completed Game</option>
+              <option value="mostPlayed">Most Hours Played</option>
+              <option value="hardest">Hardest Achievement</option>
+              <option value="favorite">Favorite Game</option>
+              <option value="rarest">Rarest Achievement</option>
+              <option value="hiddenGem">Hidden Gem</option>
+              <option value="genreSpecialist">Genre Specialist</option>
+            </select>
+
+            <p id="trophyHelper" class="trophy-helper">
+              Choose a trophy type to see how it works.
+            </p>
+
+            <div id="trophyGameField">
+              <label for="trophyGame">Game</label>
+              <select id="trophyGame"></select>
+            </div>
+
+            <div id="trophyAchievementField" class="hidden">
+              <label for="trophyAchievement">Legendary Achievement</label>
+              <select id="trophyAchievement"></select>
+            </div>
+
+            <div id="trophyTitleField">
+              <label for="trophyTitle">Title</label>
+              <input id="trophyTitle" type="text" placeholder="Trophy title..." />
+            </div>
+
+            <div id="trophyDescriptionField">
+              <label for="trophyDescription">Description</label>
+              <input id="trophyDescription" type="text" placeholder="Short description..." />
+            </div>
+
+            <button id="addTrophyBtn" class="primary-btn">Add Trophy</button>
+          </div>
+
+          <div class="trophy-preview">
+            <h2>Current Showcase</h2>
+            <div id="trophyList" class="trophy-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="friendsView" class="view hidden">
+        <div class="section-title">
+          <h1>Friends</h1>
+          <p>Open a Steam friend to see their public GameVault profile.</p>
+        </div>
+
+        <div id="friendsContainer" class="friends-layout"></div>
+      </section>
+
+      <section id="statsView" class="view hidden">
+        <div class="section-title">
+          <h1>Insights</h1>
+          <p>Weekly, monthly, and yearly wrap-ups from your Steam data.</p>
+        </div>
+
+        <div id="insightsContainer" class="insights-list"></div>
+      </section>
+
+      <section id="settingsView" class="view hidden">
+        <div class="section-title">
+          <h1>Settings</h1>
+          <p>Manage your GameVault and Steam account settings.</p>
+        </div>
+
+        <div id="settingsPanel"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="goalModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Add Goal</h2>
+
+      <input id="modalGoalInput" type="text" placeholder="Enter goal..." />
+
+      <select id="modalGoalGame">
+        <option value="global">Global Goal</option>
+      </select>
+
+      <div class="modal-actions">
+        <button id="saveGoalBtn">Save</button>
+        <button id="closeGoalBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

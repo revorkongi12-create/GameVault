@@ -1,0 +1,4 @@
+{
+  "apiBase": "https://api.your-domain.example",
+  "useLocalServer": false
+}
