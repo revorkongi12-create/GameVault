@@ -547,7 +547,6 @@ function getSteamCurrentGame() {
 
 function refreshActivityPanels() {
   renderActivityFeed();
-  renderLiveSessionPanel();
 }
 
 function finishActiveSession() {
@@ -1433,39 +1432,6 @@ function renderActivityFeed() {
       </div>
     </div>
   `).join("");
-}
-
-function renderLiveSessionPanel() {
-  const panel = document.getElementById("sessionLivePanel");
-
-  if (!panel) return;
-
-  if (state.activeSession) {
-    panel.innerHTML = `
-      <div class="session-live-card active">
-        <span>Live</span>
-        <div>
-          <strong>${escapeHtml(state.activeSession.gameName)}</strong>
-          <small>Current session length: ${formatDuration(Date.now() - state.activeSession.startedAt)}</small>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  const latestSession = getLatestFinishedSession();
-
-  panel.innerHTML = latestSession
-    ? `
-      <div class="session-live-card">
-        <span>Last</span>
-        <div>
-          <strong>${escapeHtml(latestSession.gameName)}</strong>
-          <small>Recent session length: ${formatDuration(latestSession.durationMs)}</small>
-        </div>
-      </div>
-    `
-    : "";
 }
 
 function renderHome() {

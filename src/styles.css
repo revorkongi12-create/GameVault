@@ -425,46 +425,6 @@ body{
   gap:10px;
 }
 
-.session-live-panel{
-  margin-bottom:12px;
-}
-
-.session-live-card{
-  padding:12px;
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:12px;
-  background:rgba(255,255,255,.05);
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
-
-.session-live-card span{
-  width:42px;
-  height:28px;
-  border-radius:999px;
-  background:rgba(255,255,255,.1);
-  display:grid;
-  place-items:center;
-  color:var(--muted);
-  font-size:12px;
-  font-weight:700;
-}
-
-.session-live-card.active span{
-  color:#101015;
-  background:var(--accent);
-  box-shadow:0 0 18px var(--accent-soft);
-}
-
-.session-live-card strong{
-  display:block;
-}
-
-.session-live-card small{
-  color:var(--muted);
-}
-
 .activity-item{
   padding:12px;
   border-radius:12px;
