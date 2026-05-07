@@ -1,4 +1,4 @@
 {
-  "apiBase": "http://localhost:3000",
-  "useLocalServer": true
+  "apiBase": "https://gamevault-nx5b.onrender.com",
+  "useLocalServer": false
 }

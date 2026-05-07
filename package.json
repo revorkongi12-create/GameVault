@@ -1,6 +1,6 @@
 {
   "name": "gamevault",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "A Steam-powered game library and achievement showcase.",
   "author": "GameVault",
   "main": "main.js",
@@ -31,7 +31,7 @@
     "nsis": {
       "shortcutName": "GameVault",
       "artifactName": "${productName} Setup ${version}.${ext}",
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true
     },
     "directories": {
