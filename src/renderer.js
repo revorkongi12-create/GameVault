@@ -237,7 +237,7 @@ const profileThemes = [
   { id:"blue", name:"Vault Blue", level:5 },
   { id:"green", name:"Vault Green", level:10 },
   { id:"red", name:"Vault Red", level:20 },
-  { id:"gold", name:"Vault Gold", level:30 },
+  { id:"purple", name:"Vault Purple", level:30 },
   { id:"royal", name:"Royal Blue", level:40 }
 ];
 
@@ -283,7 +283,8 @@ function normalizeThemeId(themeId) {
   const legacyThemes = {
     steam:"blue",
     cozy:"green",
-    rare:"royal"
+    rare:"royal",
+    gold:"purple"
   };
 
   return legacyThemes[themeId] || themeId || "default";

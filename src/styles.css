@@ -35,12 +35,12 @@ body[data-theme="red"]{
   --theme-glow:rgba(255,93,115,.2);
 }
 
-body[data-theme="gold"]{
-  --accent:#ffd166;
-  --accent2:#ff9f1c;
-  --theme-bg:#171006;
-  --theme-bg2:#2a1d0a;
-  --theme-glow:rgba(255,209,102,.2);
+body[data-theme="purple"]{
+  --accent:#b983ff;
+  --accent2:#6d4aff;
+  --theme-bg:#10071c;
+  --theme-bg2:#23113a;
+  --theme-glow:rgba(185,131,255,.22);
 }
 
 body[data-theme="royal"]{
