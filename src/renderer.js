@@ -351,6 +351,17 @@ function getLegendaryAchievements(game) {
   });
 }
 
+function getAchievementRaritySortValue(achievement) {
+  const percent = getAchievementPercent(achievement);
+
+  if (percent !== null) return percent;
+  if (achievement?.rarity === "hard") return HARD_ACHIEVEMENT_PERCENT;
+  if (achievement?.rarity === "legendary") return STEAM_LEGENDARY_PERCENT;
+  if (achievement?.rarity === "rare") return 40;
+
+  return 100;
+}
+
 function getGamesWithLegendaryAchievements() {
   return state.games.filter(game => getLegendaryAchievements(game).length > 0);
 }
@@ -1900,20 +1911,19 @@ function renderAchievementHuntingPanel() {
     .slice(0, 3);
   const rareMissing = gamesWithAchievements
     .flatMap(game => getGameAchievements(game)
-      .filter(achievement => !achievement.unlocked && getAchievementPercent(achievement) !== null)
+      .filter(achievement => !achievement.unlocked && isSteamLegendaryAchievement(achievement))
       .map(achievement => ({ game, achievement })))
-    .filter(item => isSteamLegendaryAchievement(item.achievement) || isHardAchievement(item.achievement))
     .sort((a, b) => {
       const aHard = isHardAchievement(a.achievement) ? 0 : 1;
       const bHard = isHardAchievement(b.achievement) ? 0 : 1;
 
       if (aHard !== bHard) return aHard - bHard;
-      return getAchievementPercent(a.achievement) - getAchievementPercent(b.achievement);
+      return getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement);
     })
     .slice(0, 3);
   const rareUnlocked = gamesWithAchievements
     .flatMap(game => getLegendaryAchievements(game).map(achievement => ({ game, achievement })))
-    .sort((a, b) => (a.achievement.globalPercent || 100) - (b.achievement.globalPercent || 100))
+    .sort((a, b) => getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement))
     .slice(0, 3);
 
   return `
