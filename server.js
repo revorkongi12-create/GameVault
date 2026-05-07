@@ -163,19 +163,15 @@ passport.use(
     {
       returnURL: STEAM_RETURN_URL,
       realm: STEAM_REALM,
-      apiKey: STEAM_API_KEY,
-      passReqToCallback:true
+      apiKey: STEAM_API_KEY
     },
-    async (req, identifier, profile, done) => {
-      const clientId = req.session?.clientId || DEFAULT_CLIENT_ID;
+    async (identifier, profile, done) => {
       const steamProfile = {
         steamid: profile.id,
         username: profile.displayName,
         avatar: profile.photos?.[2]?.value || profile.photos?.[0]?.value || "",
         profileUrl: profile._json?.profileurl || ""
       };
-
-      setSteamProfile(clientId, steamProfile);
 
       return done(null, steamProfile);
     }
@@ -184,13 +180,17 @@ passport.use(
 
 app.get("/auth/steam", (req, res, next) => {
   req.session.clientId = getClientId(req);
-  passport.authenticate("steam")(req, res, next);
+  req.session.save(() => {
+    passport.authenticate("steam")(req, res, next);
+  });
 });
 
 app.get(
   "/auth/steam/return",
   passport.authenticate("steam", { failureRedirect: "/auth/failure" }),
   (req, res) => {
+    setSteamProfile(req.session?.clientId || DEFAULT_CLIENT_ID, req.user);
+
     res.send(`
       <html>
         <body style="background:#0b0b10;color:white;font-family:Arial;text-align:center;padding-top:80px;">
