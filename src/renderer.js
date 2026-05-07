@@ -54,6 +54,13 @@ const HARD_ACHIEVEMENT_PERCENT = 2;
 const STEAM_LEGENDARY_PERCENT = 10;
 const ACTIVITY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_TICK_INTERVAL_MS = 30 * 1000;
+const ACTIVITY_ICONS = {
+  achievement:"✦",
+  session:"▶",
+  play:"▶",
+  trophy:"◆",
+  new:"＋"
+};
 const GAME_IMAGE_FALLBACKS = [
   appid => `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`,
   appid => `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`,
@@ -372,6 +379,10 @@ function addActivity(type, icon, text, time = "Just now") {
 
   state.activities = state.activities.slice(0, 6);
   refreshActivityPanels();
+}
+
+function getActivityIcon(item) {
+  return ACTIVITY_ICONS[item.type] || ACTIVITY_ICONS[String(item.icon || "").toLowerCase()] || ACTIVITY_ICONS.new;
 }
 
 function getRarestUnlockedAchievement() {
@@ -1165,16 +1176,54 @@ async function disconnectSteamProfile() {
 
 function pollSteamLogin() {
   let attempts = 0;
+  const loginStatus = document.getElementById("loginStatus");
+  const loginButton = document.getElementById("loginSteamBtn");
+
+  if (loginStatus) {
+    loginStatus.textContent = "Waiting for Steam sign-in...";
+  }
+
+  if (loginButton) {
+    loginButton.disabled = true;
+    loginButton.textContent = "Checking Steam sign-in...";
+  }
 
   const interval = setInterval(async () => {
     attempts += 1;
 
     const profile = await refreshSteamProfile();
 
-    if (profile || attempts >= 20) {
+    if (profile) {
       clearInterval(interval);
+
+      if (loginStatus) {
+        loginStatus.textContent = "Steam connected. Loading GameVault...";
+      }
+
+      if (loginButton) {
+        loginButton.disabled = false;
+        loginButton.textContent = "Sign in with Steam";
+      }
+      return;
     }
-  }, 1500);
+
+    if (loginStatus) {
+      loginStatus.textContent = `Checking for Steam sign-in... ${Math.ceil((90 - attempts * 2) / 2)}s`;
+    }
+
+    if (attempts >= 45) {
+      clearInterval(interval);
+
+      if (loginStatus) {
+        loginStatus.textContent = "Still not connected. Finish Steam sign-in, then click I already signed in.";
+      }
+
+      if (loginButton) {
+        loginButton.disabled = false;
+        loginButton.textContent = "Sign in with Steam";
+      }
+    }
+  }, 2000);
 }
 
 function simulateLaunch(game) {
@@ -1362,7 +1411,7 @@ function renderActivityFeed() {
   if (!items.length) {
     container.innerHTML = `
       <div class="activity-item">
-        <span>New</span>
+        <span class="activity-icon">${ACTIVITY_ICONS.new}</span>
 
         <div>
           <strong>No recent activity yet</strong><br>
@@ -1376,7 +1425,7 @@ function renderActivityFeed() {
 
   container.innerHTML = items.map(item => `
     <div class="activity-item">
-      <span>${item.icon}</span>
+      <span class="activity-icon">${getActivityIcon(item)}</span>
 
       <div>
         <strong>${item.text}</strong><br>
@@ -3257,6 +3306,12 @@ document.getElementById("loginSteamBtn").onclick = () => {
 };
 
 document.getElementById("loginRefreshBtn").onclick = () => {
+  const loginStatus = document.getElementById("loginStatus");
+
+  if (loginStatus) {
+    loginStatus.textContent = "Checking Steam profile...";
+  }
+
   refreshSteamProfile();
 };
 
