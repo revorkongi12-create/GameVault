@@ -63,6 +63,8 @@ Never publish your real `.env` or Steam Web API key. The `.gitignore` keeps loca
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the full GitHub release and hosted-backend checklist.
 
+When the backend is deployed, opening its root URL should show a JSON health response. `/api/steam/profile` should return `connected:false` until a GameVault install signs in.
+
 ## Release Notes
 
 This project is currently packaged as a Windows NSIS installer through Electron Builder. GitHub Actions can build the installer from tags once `GAMEVAULT_API_BASE` is configured as a repository variable.

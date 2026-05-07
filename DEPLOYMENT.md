@@ -19,6 +19,16 @@ PORT=3000
 
 `CORS_ORIGIN=*` is acceptable for the desktop app because GameVault uses a per-install client ID, not browser cookies, for API identity.
 
+After deployment, open these URLs:
+
+```text
+https://api.your-domain.example/
+https://api.your-domain.example/health
+https://api.your-domain.example/api/steam/profile
+```
+
+The first two should return `status:"ok"`. The profile endpoint should return `connected:false` before signing in.
+
 ## 2. Register Steam Login Domain
 
 In Steamworks / Steam Web API settings, set the domain to the backend domain you control.

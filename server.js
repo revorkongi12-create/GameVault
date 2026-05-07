@@ -10,6 +10,8 @@ require("dotenv").config({ path:path.join(__dirname, ".env") });
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const PORT = process.env.PORT || 3000;
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
 const STEAM_REALM = process.env.STEAM_REALM;
@@ -131,6 +133,22 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+app.get("/", (req, res) => {
+  res.json({
+    name:"GameVault API",
+    status:"ok",
+    steamLoginConfigured:Boolean(STEAM_API_KEY && STEAM_REALM && STEAM_RETURN_URL),
+    profileEndpoint:"/api/steam/profile",
+    authEndpoint:"/auth/steam?clientId=YOUR_GAMEVAULT_CLIENT_ID"
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status:"ok"
+  });
+});
 
 passport.serializeUser((user, done) => {
   done(null, user);

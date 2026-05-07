@@ -15,9 +15,29 @@ const shell = window.gameVault || {
 
 let API_BASE = shell.apiBase || "http://localhost:3000";
 const CLIENT_ID_STORAGE_KEY = "gameVaultClientId";
-const CLIENT_ID = localStorage.getItem(CLIENT_ID_STORAGE_KEY) || crypto.randomUUID();
+const CLIENT_ID = localStorage.getItem(CLIENT_ID_STORAGE_KEY) || createClientId();
 
 localStorage.setItem(CLIENT_ID_STORAGE_KEY, CLIENT_ID);
+
+function createClientId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  const randomParts = new Uint32Array(4);
+
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(randomParts);
+  } else {
+    randomParts.forEach((value, index) => {
+      randomParts[index] = Math.floor(Math.random() * 0xffffffff);
+    });
+  }
+
+  return [...randomParts]
+    .map(part => part.toString(16).padStart(8, "0"))
+    .join("-");
+}
 
 function getApiUrl(path) {
   const normalizedBase = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
