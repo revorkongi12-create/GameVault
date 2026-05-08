@@ -1193,10 +1193,34 @@ body{
   border:1px solid rgba(255,255,255,.04);
 }
 
+.achievement-item.rare-achievement{
+  border-color:color-mix(in srgb, var(--accent) 42%, rgba(255,255,255,.08));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.05)), rgba(255,255,255,.04));
+  box-shadow:0 0 18px var(--theme-glow);
+}
+
+.achievement-item.legendary-achievement,
+.achievement-item.hard-achievement{
+  border-color:color-mix(in srgb, var(--accent2) 56%, rgba(255,255,255,.12));
+}
+
 .achievement-item p{
   margin:4px 0 0;
   font-size:12px;
   color:var(--muted);
+}
+
+.achievement-hunt-badge{
+  display:inline-flex;
+  width:max-content;
+  margin-top:6px;
+  padding:4px 8px;
+  border-radius:999px;
+  color:#101015;
+  background:var(--accent);
+  font-size:11px;
+  font-weight:800;
 }
 
 .achievement-icon{

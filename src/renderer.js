@@ -345,6 +345,18 @@ function isGameVaultRareAchievement(achievement) {
   return ["hard", "legendary", "rare"].includes(rarity);
 }
 
+function getAchievementRarityClass(achievement) {
+  const rarity = getAchievementRarityLabel(achievement);
+
+  return isGameVaultRareAchievement(achievement) ? ` ${rarity}-achievement rare-achievement` : "";
+}
+
+function getAchievementHuntBadge(achievement) {
+  if (!isGameVaultRareAchievement(achievement)) return "";
+
+  return achievement.unlocked ? "Rare win" : "Rare target";
+}
+
 function formatAchievementPercent(achievement) {
   const percent = getAchievementPercent(achievement);
 
@@ -1838,19 +1850,31 @@ function renderAchievements() {
     const safeGameId = String(game.id ?? game.appid ?? index).replace(/[^a-zA-Z0-9_-]/g, "");
     const listId = `achievementList-${safeGameId || index}`;
 
+    const sortedAchievements = [...achievements].sort((a, b) => {
+      const aRareMissing = !a.unlocked && isGameVaultRareAchievement(a);
+      const bRareMissing = !b.unlocked && isGameVaultRareAchievement(b);
+
+      if (aRareMissing !== bRareMissing) return Number(bRareMissing) - Number(aRareMissing);
+      if (a.unlocked !== b.unlocked) return Number(a.unlocked) - Number(b.unlocked);
+
+      return getAchievementRaritySortValue(a) - getAchievementRaritySortValue(b);
+    });
+
     const achievementRows = total
-      ? achievements.map(achievement => {
+      ? sortedAchievements.map(achievement => {
         const icon = achievement.unlocked
           ? achievement.icon
           : achievement.iconGray || achievement.icon;
         const globalPercent = typeof achievement.globalPercent === "number"
           ? ` - ${achievement.globalPercent.toFixed(1)}% global`
           : "";
+        const rarityLabel = getAchievementRarityLabel(achievement);
         const description = achievement.description ||
-          `${achievement.rarity || "common"} achievement${globalPercent}`;
+          `${rarityLabel} achievement${globalPercent}`;
+        const huntBadge = getAchievementHuntBadge(achievement);
 
         return `
-          <div class="achievement-item ${achievement.unlocked ? "unlocked" : "locked"}">
+          <div class="achievement-item ${achievement.unlocked ? "unlocked" : "locked"}${getAchievementRarityClass(achievement)}">
             <div class="achievement-icon">
               ${icon ? `<img src="${escapeHtml(icon)}" alt="">` : achievement.unlocked ? "Done" : "Lock"}
             </div>
@@ -1858,6 +1882,7 @@ function renderAchievements() {
             <div>
               <strong>${escapeHtml(achievement.name || "Unnamed achievement")}</strong>
               <p>${escapeHtml(description)}</p>
+              ${huntBadge ? `<small class="achievement-hunt-badge">${huntBadge} - ${formatAchievementPercent(achievement)}</small>` : ""}
             </div>
 
             <span class="achievement-status">
@@ -1904,6 +1929,14 @@ function renderAchievements() {
 
 function renderAchievementHuntingPanel() {
   const gamesWithAchievements = state.games.filter(game => getGameAchievements(game).length);
+  const missingAchievementPool = gamesWithAchievements
+    .flatMap(game => getGameAchievements(game)
+      .filter(achievement => !achievement.unlocked)
+      .map(achievement => ({ game, achievement })));
+  const unlockedAchievementPool = gamesWithAchievements
+    .flatMap(game => getGameAchievements(game)
+      .filter(achievement => achievement.unlocked)
+      .map(achievement => ({ game, achievement })));
   const closestGames = gamesWithAchievements
     .map(game => {
       const missing = getGameAchievements(game).filter(achievement => !achievement.unlocked);
@@ -1916,10 +1949,8 @@ function renderAchievementHuntingPanel() {
       return (Number(b.game.completion) || 0) - (Number(a.game.completion) || 0);
     })
     .slice(0, 3);
-  const rareMissing = gamesWithAchievements
-    .flatMap(game => getGameAchievements(game)
-      .filter(achievement => !achievement.unlocked && isGameVaultRareAchievement(achievement))
-      .map(achievement => ({ game, achievement })))
+  const rareMissing = missingAchievementPool
+    .filter(item => isGameVaultRareAchievement(item.achievement))
     .sort((a, b) => {
       const aHard = isHardAchievement(a.achievement) ? 0 : 1;
       const bHard = isHardAchievement(b.achievement) ? 0 : 1;
@@ -1928,10 +1959,14 @@ function renderAchievementHuntingPanel() {
       return getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement);
     })
     .slice(0, 8);
-  const rareUnlocked = gamesWithAchievements
-    .flatMap(game => getGameAchievements(game)
-      .filter(achievement => achievement.unlocked && isGameVaultRareAchievement(achievement))
-      .map(achievement => ({ game, achievement })))
+  const fallbackMissing = rareMissing.length ? [] : missingAchievementPool
+    .sort((a, b) => getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement))
+    .slice(0, 8);
+  const rareUnlocked = unlockedAchievementPool
+    .filter(item => isGameVaultRareAchievement(item.achievement))
+    .sort((a, b) => getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement))
+    .slice(0, 8);
+  const fallbackUnlocked = rareUnlocked.length ? [] : unlockedAchievementPool
     .sort((a, b) => getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement))
     .slice(0, 8);
 
@@ -1960,7 +1995,15 @@ function renderAchievementHuntingPanel() {
               ${escapeHtml(item.achievement.name || "Unnamed achievement")}
               <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
             </button>
-          `).join("") : `<p>No rare missing achievements found.</p>`}
+          `).join("") : fallbackMissing.length ? `
+            <p>Steam did not return rare missing data yet, so these are your next missing targets.</p>
+            ${fallbackMissing.map(item => `
+              <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
+                ${escapeHtml(item.achievement.name || "Unnamed achievement")}
+                <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
+              </button>
+            `).join("")}
+          ` : `<p>No missing achievements found.</p>`}
         </div>
 
         <div class="hunting-card">
@@ -1970,7 +2013,15 @@ function renderAchievementHuntingPanel() {
               ${escapeHtml(item.achievement.name || "Unnamed achievement")}
               <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
             </button>
-          `).join("") : `<p>No rare unlocked achievements yet.</p>`}
+          `).join("") : fallbackUnlocked.length ? `
+            <p>Steam did not return rare win data yet, so these are your latest unlocked targets.</p>
+            ${fallbackUnlocked.map(item => `
+              <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
+                ${escapeHtml(item.achievement.name || "Unnamed achievement")}
+                <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
+              </button>
+            `).join("")}
+          ` : `<p>No unlocked achievements yet.</p>`}
         </div>
       </div>
     </div>
