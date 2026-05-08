@@ -1,10 +1,8 @@
 const express = require("express");
-const passport = require("passport");
-const session = require("express-session");
-const SteamStrategy = require("passport-steam").Strategy;
 const axios = require("axios");
 const cors = require("cors");
 const fs = require("fs");
+const openid = require("openid");
 const path = require("path");
 require("dotenv").config({ path:path.join(__dirname, ".env") });
 
@@ -16,7 +14,6 @@ const PORT = process.env.PORT || 3000;
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
 const STEAM_REALM = process.env.STEAM_REALM;
 const STEAM_RETURN_URL = process.env.STEAM_RETURN_URL;
-const SESSION_SECRET = process.env.SESSION_SECRET || "gamevault-local-dev-secret";
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 const DEFAULT_CLIENT_ID = "local";
 const PROFILE_STORE_VERSION = 2;
@@ -65,7 +62,25 @@ function saveSteamProfiles() {
 }
 
 function getClientId(req, { allowDefault = false } = {}) {
-  return req.query.clientId || req.get("x-gamevault-client-id") || req.session?.clientId || (allowDefault ? DEFAULT_CLIENT_ID : null);
+  return req.query.clientId || req.get("x-gamevault-client-id") || (allowDefault ? DEFAULT_CLIENT_ID : null);
+}
+
+function getSteamReturnUrl(clientId) {
+  const returnUrl = new URL(STEAM_RETURN_URL);
+
+  returnUrl.searchParams.set("clientId", clientId);
+
+  return returnUrl.toString();
+}
+
+function getSteamRelyingParty(clientId) {
+  return new openid.RelyingParty(
+    getSteamReturnUrl(clientId),
+    STEAM_REALM,
+    true,
+    true,
+    []
+  );
 }
 
 function getSteamProfile(req) {
@@ -130,6 +145,31 @@ async function getSteamProfileSnapshot(req) {
   }
 }
 
+async function getSteamProfileBySteamId(steamid) {
+  const response = await axios.get("https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/", {
+    params:{
+      key:STEAM_API_KEY,
+      steamids:steamid
+    }
+  });
+  const summary = response.data.response?.players?.[0];
+
+  if (!summary) {
+    throw new Error("Steam did not return a profile for this account.");
+  }
+
+  return {
+    steamid:summary.steamid,
+    username:summary.personaname,
+    avatar:summary.avatarfull || summary.avatarmedium || summary.avatar || "",
+    profileUrl:summary.profileurl || "",
+    status:summary.personastate || 0,
+    currentGame:summary.gameextrainfo || "",
+    currentGameId:summary.gameid || "",
+    lastOnline:summary.lastlogoff || 0
+  };
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (CORS_ORIGIN === "*" || !origin) {
@@ -141,19 +181,6 @@ app.use(cors({
     callback(null, allowedOrigins.includes(origin));
   }
 }));
-
-app.use(session({
-  secret:SESSION_SECRET,
-  resave:false,
-  saveUninitialized:false,
-  cookie:{
-    sameSite:"lax",
-    secure:STEAM_RETURN_URL?.startsWith("https://") || false
-  }
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
 
 app.get("/", (req, res) => {
   res.json({
@@ -181,67 +208,63 @@ app.get("/debug/auth", (req, res) => {
   });
 });
 
-passport.serializeUser((user, done) => {
-  done(null, user);
-});
-
-passport.deserializeUser((user, done) => {
-  done(null, user);
-});
-
-passport.use(
-  new SteamStrategy(
-    {
-      returnURL: STEAM_RETURN_URL,
-      realm: STEAM_REALM,
-      apiKey: STEAM_API_KEY
-    },
-    async (identifier, profile, done) => {
-      const steamProfile = {
-        steamid: profile.id,
-        username: profile.displayName,
-        avatar: profile.photos?.[2]?.value || profile.photos?.[0]?.value || "",
-        profileUrl: profile._json?.profileurl || ""
-      };
-
-      return done(null, steamProfile);
-    }
-  )
-);
-
-app.get("/auth/steam", (req, res, next) => {
+app.get("/auth/steam", (req, res) => {
   const clientId = getClientId(req);
 
   if (!clientId) {
     return res.status(400).send("GameVault client ID is required to start Steam login.");
   }
 
-  req.session.clientId = clientId;
-  req.session.save(() => {
-    passport.authenticate("steam")(req, res, next);
+  const relyingParty = getSteamRelyingParty(clientId);
+
+  relyingParty.authenticate("https://steamcommunity.com/openid", false, (error, authUrl) => {
+    if (error || !authUrl) {
+      return res.status(500).send("Could not start Steam login.");
+    }
+
+    res.redirect(authUrl);
   });
 });
 
-app.get(
-  "/auth/steam/return",
-  passport.authenticate("steam", { failureRedirect: "/auth/failure" }),
-  (req, res) => {
-    if (!req.session?.clientId) {
-      return res.status(400).send("Steam connected, but GameVault could not verify which app install requested this login. Please return to GameVault and sign in again.");
+app.get("/auth/steam/return", (req, res) => {
+  const clientId = getClientId(req);
+
+  if (!clientId) {
+    return res.status(400).send("Steam connected, but GameVault could not verify which app install requested this login. Please return to GameVault and sign in again.");
+  }
+
+  const relyingParty = getSteamRelyingParty(clientId);
+
+  relyingParty.verifyAssertion(req.url, async (error, result) => {
+    if (error || !result?.authenticated) {
+      return res.status(401).send("Steam authentication failed.");
     }
 
-    setSteamProfile(req.session.clientId, req.user);
+    const identifier = result.claimedIdentifier || result.claimed_id || req.query["openid.claimed_id"];
+    const steamIdMatch = String(identifier || "").match(/\/openid\/id\/(\d+)$/);
 
-    res.send(`
-      <html>
-        <body style="background:#0b0b10;color:white;font-family:Arial;text-align:center;padding-top:80px;">
-          <h1>Steam connected!</h1>
-          <p>You can close this window and return to GameVault.</p>
-        </body>
-      </html>
-    `);
-  }
-);
+    if (!steamIdMatch) {
+      return res.status(401).send("Steam authentication returned an invalid Steam ID.");
+    }
+
+    try {
+      const steamProfile = await getSteamProfileBySteamId(steamIdMatch[1]);
+
+      setSteamProfile(clientId, steamProfile);
+
+      res.send(`
+        <html>
+          <body style="background:#0b0b10;color:white;font-family:Arial;text-align:center;padding-top:80px;">
+            <h1>Steam connected!</h1>
+            <p>You can close this window and return to GameVault.</p>
+          </body>
+        </html>
+      `);
+    } catch (profileError) {
+      res.status(500).send("Steam connected, but GameVault could not fetch the Steam profile.");
+    }
+  });
+});
 
 app.get("/auth/failure", (req, res) => {
   res.status(401).send("Steam authentication failed.");
@@ -263,9 +286,7 @@ app.get("/api/steam/profile", async (req, res) => {
 app.post("/api/steam/logout", (req, res) => {
   clearSteamProfile(req);
 
-  req.logout(() => {
-    res.json({ success:true });
-  });
+  res.json({ success:true });
 });
 
 app.get("/api/steam/owned-games", async (req, res) => {

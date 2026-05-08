@@ -48,8 +48,6 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "passport": "^0.7.0",
-    "passport-steam": "^1.0.18"
+    "openid": "^2.0.15"
   }
 }
