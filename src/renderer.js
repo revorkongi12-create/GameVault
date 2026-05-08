@@ -18,6 +18,7 @@ const CLIENT_ID_STORAGE_KEY = "gameVaultClientId";
 const CLIENT_ID = localStorage.getItem(CLIENT_ID_STORAGE_KEY) || createClientId();
 let activeViewName = "home";
 let librarySyncInProgress = false;
+let steamExtrasInProgress = false;
 
 localStorage.setItem(CLIENT_ID_STORAGE_KEY, CLIENT_ID);
 
@@ -1380,9 +1381,15 @@ async function publishGameVaultProfile() {
 }
 
 async function fetchSteamExtras() {
-  if (!state.steamProfile) return;
+  if (!state.steamProfile || steamExtrasInProgress) return;
 
   try {
+    steamExtrasInProgress = true;
+
+    if (activeViewName === "settings") {
+      renderSettings();
+    }
+
     const response = await fetch(getApiUrl("/api/steam/extras"));
 
     if (!response.ok) return;
@@ -1391,6 +1398,8 @@ async function fetchSteamExtras() {
     saveState();
   } catch (error) {
     console.error("Could not fetch Steam extras:", error);
+  } finally {
+    steamExtrasInProgress = false;
   }
 }
 
@@ -1744,15 +1753,16 @@ function renderSettings() {
   const panel = document.getElementById("settingsPanel");
   const unlockedThemes = getUnlockedThemes();
   const unlockedBadges = getUnlockedBadges();
+  const steamExtrasLabel = steamExtrasInProgress ? "loading Steam level and value estimate..." : "not loaded yet";
 
   panel.innerHTML = `
     <div class="placeholder-card">
       <h1>Steam Account</h1>
       <p>${state.steamProfile ? `Connected as ${state.steamProfile.username}` : "Not connected"}</p>
       <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
-      <p>Steam level: ${state.steamExtras?.steamLevel || "not loaded yet"}</p>
-      <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || "estimating after Steam sync"}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
-      <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : "not loaded yet"}</p>
+      <p>Steam level: ${state.steamExtras?.steamLevel || steamExtrasLabel}</p>
+      <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || steamExtrasLabel}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
+      <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : steamExtrasLabel}</p>
       <p>${state.steamExtras?.valueNote || "Inventory value needs market-price support and is not shown yet."}</p>
 
       <button id="openSteamProfileBtn" class="primary-btn">
@@ -1761,6 +1771,10 @@ function renderSettings() {
 
       <button id="syncSteamLibraryBtn" class="primary-btn">
         Import Steam Library & Achievements
+      </button>
+
+      <button id="refreshSteamExtrasBtn" class="secondary-btn">
+        Refresh Steam Level & Value
       </button>
 
       <button id="disconnectSteamBtn" class="primary-btn">
@@ -1802,6 +1816,8 @@ function renderSettings() {
           </label>
         `).join("")}
       </div>
+
+      <button id="resetProfileCustomizationBtn" class="secondary-btn">Reset Profile Customization</button>
     </div>
 
     <div class="placeholder-card settings-card">
@@ -1861,6 +1877,14 @@ function renderSettings() {
     renderSettings();
   };
 
+  document.getElementById("refreshSteamExtrasBtn").onclick = async () => {
+    state.steamExtras = null;
+    saveState();
+    await fetchSteamExtras();
+    renderSettings();
+    renderHome();
+  };
+
   document.getElementById("themeSelect").onchange = event => {
     state.selectedTheme = event.target.value;
     saveState();
@@ -1908,6 +1932,26 @@ function renderSettings() {
   document.getElementById("clearAvatarBtn").onclick = () => {
     state.customAvatar = "";
     saveState();
+    renderHome();
+  };
+
+  document.getElementById("resetProfileCustomizationBtn").onclick = () => {
+    state.customDisplayName = "";
+    state.customAvatar = "";
+    state.profileBio = "";
+    state.profileBackground = "";
+    state.profileBackgroundPreset = "vault";
+    state.profileLayout = "hero";
+    state.profileStatVisibility = {
+      totalHours:true,
+      games:true,
+      level:true,
+      score:true,
+      steamLevel:true,
+      libraryValue:true
+    };
+    saveState();
+    renderSettings();
     renderHome();
   };
 
