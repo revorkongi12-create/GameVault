@@ -19,11 +19,10 @@ const STEAM_RETURN_URL = process.env.STEAM_RETURN_URL;
 const SESSION_SECRET = process.env.SESSION_SECRET || "gamevault-local-dev-secret";
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 const DEFAULT_CLIENT_ID = "local";
-const RECENT_AUTH_CLAIM_WINDOW_MS = 5 * 60 * 1000;
+const PROFILE_STORE_VERSION = 2;
 
 const steamSchemaCache = new Map();
 const steamAppDetailsCache = new Map();
-let recentSteamAuth = null;
 const userDataPath = path.join(process.env.APPDATA || __dirname, "GameVault");
 const savedProfilePath = path.join(userDataPath, "steam-profile.json");
 const savedProfilesPath = path.join(userDataPath, "steam-profiles.json");
@@ -33,13 +32,15 @@ function loadSavedSteamProfiles() {
     if (fs.existsSync(savedProfilesPath)) {
       const savedProfiles = JSON.parse(fs.readFileSync(savedProfilesPath, "utf8"));
 
-      return new Map(Object.entries(savedProfiles));
+      if (savedProfiles.version === PROFILE_STORE_VERSION && savedProfiles.profiles) {
+        return new Map(Object.entries(savedProfiles.profiles));
+      }
+
+      return new Map();
     }
 
     if (fs.existsSync(savedProfilePath)) {
-      const legacyProfile = JSON.parse(fs.readFileSync(savedProfilePath, "utf8"));
-
-      return new Map([[DEFAULT_CLIENT_ID, legacyProfile]]);
+      return new Map();
     }
 
     return new Map();
@@ -54,59 +55,47 @@ const steamProfiles = loadSavedSteamProfiles();
 function saveSteamProfiles() {
   try {
     fs.mkdirSync(userDataPath, { recursive:true });
-    fs.writeFileSync(savedProfilesPath, JSON.stringify(Object.fromEntries(steamProfiles), null, 2));
+    fs.writeFileSync(savedProfilesPath, JSON.stringify({
+      version:PROFILE_STORE_VERSION,
+      profiles:Object.fromEntries(steamProfiles)
+    }, null, 2));
   } catch (error) {
     console.error("Could not save Steam profiles:", error.message);
   }
 }
 
-function getClientId(req) {
-  return req.query.clientId || req.get("x-gamevault-client-id") || req.session?.clientId || DEFAULT_CLIENT_ID;
+function getClientId(req, { allowDefault = false } = {}) {
+  return req.query.clientId || req.get("x-gamevault-client-id") || req.session?.clientId || (allowDefault ? DEFAULT_CLIENT_ID : null);
 }
 
 function getSteamProfile(req) {
   const clientId = getClientId(req);
 
-  return steamProfiles.get(clientId) || claimRecentSteamAuth(clientId);
+  return clientId ? steamProfiles.get(clientId) : null;
 }
 
 function setSteamProfile(clientId, profile) {
-  const resolvedClientId = clientId || DEFAULT_CLIENT_ID;
-
-  steamProfiles.set(resolvedClientId, profile);
-  recentSteamAuth = {
-    clientId:resolvedClientId,
-    profile,
-    createdAt:Date.now()
-  };
-  saveSteamProfiles();
-}
-
-function claimRecentSteamAuth(clientId) {
-  if (!clientId || clientId === DEFAULT_CLIENT_ID || !recentSteamAuth) return null;
-
-  const isFresh = Date.now() - recentSteamAuth.createdAt <= RECENT_AUTH_CLAIM_WINDOW_MS;
-
-  if (!isFresh) {
-    recentSteamAuth = null;
-    return null;
+  if (!clientId) {
+    throw new Error("Cannot store Steam profile without a GameVault client ID.");
   }
 
-  steamProfiles.set(clientId, recentSteamAuth.profile);
-  recentSteamAuth = null;
+  steamProfiles.set(clientId, profile);
   saveSteamProfiles();
-
-  return steamProfiles.get(clientId);
 }
 
 function clearSteamProfile(req) {
-  steamProfiles.delete(getClientId(req));
+  const clientId = getClientId(req);
+
+  if (clientId) {
+    steamProfiles.delete(clientId);
+  }
+
   saveSteamProfiles();
 }
 
 async function getSteamProfileSnapshot(req) {
   const clientId = getClientId(req);
-  const steamProfile = steamProfiles.get(clientId);
+  const steamProfile = clientId ? steamProfiles.get(clientId) : null;
 
   if (!steamProfile) return null;
 
@@ -187,10 +176,8 @@ app.get("/debug/auth", (req, res) => {
 
   res.json({
     clientId,
-    connected:Boolean(steamProfiles.get(clientId)),
-    storedProfiles:steamProfiles.size,
-    recentAuthAvailable:Boolean(recentSteamAuth),
-    recentAuthAgeSeconds:recentSteamAuth ? Math.round((Date.now() - recentSteamAuth.createdAt) / 1000) : null
+    connected:Boolean(clientId && steamProfiles.get(clientId)),
+    storedProfiles:steamProfiles.size
   });
 });
 
@@ -223,7 +210,13 @@ passport.use(
 );
 
 app.get("/auth/steam", (req, res, next) => {
-  req.session.clientId = getClientId(req);
+  const clientId = getClientId(req);
+
+  if (!clientId) {
+    return res.status(400).send("GameVault client ID is required to start Steam login.");
+  }
+
+  req.session.clientId = clientId;
   req.session.save(() => {
     passport.authenticate("steam")(req, res, next);
   });
@@ -233,7 +226,11 @@ app.get(
   "/auth/steam/return",
   passport.authenticate("steam", { failureRedirect: "/auth/failure" }),
   (req, res) => {
-    setSteamProfile(req.session?.clientId || DEFAULT_CLIENT_ID, req.user);
+    if (!req.session?.clientId) {
+      return res.status(400).send("Steam connected, but GameVault could not verify which app install requested this login. Please return to GameVault and sign in again.");
+    }
+
+    setSteamProfile(req.session.clientId, req.user);
 
     res.send(`
       <html>
