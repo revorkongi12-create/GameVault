@@ -338,7 +338,7 @@ app.get("/api/steam/achievements/:appid", async (req, res) => {
       achievements
     });
   } catch (error) {
-    res.status(404).json({
+    res.status(error.statusCode || 404).json({
       error:"Achievements are not available for this game.",
       details:error.message
     });
@@ -432,6 +432,15 @@ async function getPlayerAchievementsForApp(steamid, appid) {
   ]);
 
   const playerStats = playerResponse.data.playerstats || {};
+
+  if (playerStats.success === false) {
+    const message = playerStats.error || "Steam did not return achievement progress for this profile and game.";
+    const error = new Error(message);
+
+    error.statusCode = 403;
+    throw error;
+  }
+
   const unlockedByApiName = new Map(
     (playerStats.achievements || []).map(achievement => [
       achievement.apiname,

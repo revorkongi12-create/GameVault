@@ -54,6 +54,7 @@ const HARD_ACHIEVEMENT_PERCENT = 2;
 const STEAM_LEGENDARY_PERCENT = 25;
 const ACTIVITY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_TICK_INTERVAL_MS = 30 * 1000;
+const ACHIEVEMENT_SYNC_SCHEMA_VERSION = 2;
 const ACTIVITY_ICONS = {
   achievement:"✦",
   session:"▶",
@@ -85,6 +86,7 @@ const state = {
   steamProfile: null,
   steamLibrarySyncedAt: null,
   steamAchievementsSyncedAt: null,
+  achievementSyncVersion: 0,
   keybinds: {}
 };
 
@@ -124,6 +126,7 @@ function loadState() {
     if (!("steamProfile" in state)) state.steamProfile = null;
     if (!("steamLibrarySyncedAt" in state)) state.steamLibrarySyncedAt = null;
     if (!("steamAchievementsSyncedAt" in state)) state.steamAchievementsSyncedAt = null;
+    if (!("achievementSyncVersion" in state)) state.achievementSyncVersion = 0;
     if (!state.keybinds) state.keybinds = {};
     state.keybinds = normalizeKeybinds(state.keybinds);
 
@@ -163,6 +166,7 @@ function loadState() {
     state.steamProfile = null;
     state.steamLibrarySyncedAt = null;
     state.steamAchievementsSyncedAt = null;
+    state.achievementSyncVersion = 0;
     state.keybinds = normalizeKeybinds({});
 
     saveState();
@@ -833,15 +837,61 @@ async function fetchSteamAchievements(appid) {
     const response = await fetch(getApiUrl(`/api/steam/achievements/${appid}`));
 
     if (!response.ok) {
-      return [];
+      const errorData = await response.json().catch(() => ({}));
+
+      return {
+        achievements:null,
+        available:false,
+        error:errorData.details || errorData.error || `Steam achievement request failed with status ${response.status}`
+      };
     }
 
     const data = await response.json();
 
-    return data.achievements || [];
+    return {
+      achievements:data.achievements || [],
+      available:true,
+      error:""
+    };
   } catch (error) {
     console.error(error);
-    return [];
+    return {
+      achievements:null,
+      available:false,
+      error:error.message
+    };
+  }
+}
+
+async function fetchSteamAchievementsForSteamId(steamid, appid) {
+  try {
+    const response = await fetch(getApiUrl(`/api/steam/friends/${steamid}/achievements/${appid}`));
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+
+      return {
+        achievements:null,
+        available:false,
+        error:errorData.details || errorData.error || `Steam achievement request failed with status ${response.status}`
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      achievements:data.achievements || [],
+      available:true,
+      error:""
+    };
+  } catch (error) {
+    console.error(error);
+
+    return {
+      achievements:null,
+      available:false,
+      error:error.message
+    };
   }
 }
 
@@ -931,19 +981,24 @@ async function hydrateSteamAchievements(games) {
       index += 1;
 
       const game = games[gameIndex];
-      const [achievements, details] = await Promise.all([
+      const [achievementResult, details] = await Promise.all([
         fetchSteamAchievements(game.appid),
         fetchSteamAppDetails(game.appid)
       ]);
+      const achievements = achievementResult.available
+        ? achievementResult.achievements
+        : getGameAchievements(game);
       const unlocked = achievements.filter(achievement => achievement.unlocked).length;
       const completion = achievements.length
         ? Math.round((unlocked / achievements.length) * 100)
-        : 0;
+        : game.completion || 0;
 
       hydratedGames[gameIndex] = {
         ...game,
         achievements,
         completion,
+        achievementSyncAvailable:achievementResult.available,
+        achievementSyncError:achievementResult.error || "",
         cover: details.headerImage || game.cover || getSteamGameCover(game.appid),
         genres: details.genres || []
       };
@@ -991,18 +1046,33 @@ async function refreshRecentActivityData() {
 
     if (!game) return;
 
-    const achievements = await fetchSteamAchievements(appid);
+    const achievementResult = await fetchSteamAchievements(appid);
 
-    if (!achievements.length) return;
+    if (!achievementResult.available) {
+      game.achievementSyncAvailable = false;
+      game.achievementSyncError = achievementResult.error || "Achievement sync unavailable.";
+      return;
+    }
+
+    const achievements = achievementResult.achievements;
+
+    if (!achievements.length) {
+      game.achievementSyncAvailable = true;
+      game.achievementSyncError = "";
+      return;
+    }
 
     const unlocked = achievements.filter(achievement => achievement.unlocked).length;
 
     game.achievements = achievements;
     game.completion = Math.round((unlocked / achievements.length) * 100);
+    game.achievementSyncAvailable = true;
+    game.achievementSyncError = "";
   }));
 
   state.games = sortGamesAlphabetically(state.games);
   state.steamAchievementsSyncedAt = Date.now();
+  state.achievementSyncVersion = ACHIEVEMENT_SYNC_SCHEMA_VERSION;
   saveState();
   refreshActivityPanels();
 }
@@ -1031,6 +1101,7 @@ async function syncSteamLibrary({ silent = false } = {}) {
     state.currentGameId = state.games[0]?.id || null;
     state.steamLibrarySyncedAt = Date.now();
     state.steamAchievementsSyncedAt = Date.now();
+    state.achievementSyncVersion = ACHIEVEMENT_SYNC_SCHEMA_VERSION;
 
     saveState();
     renderHome();
@@ -1156,7 +1227,12 @@ async function refreshSteamProfile() {
       state.steamProfile = data.profile;
       updateCurrentSessionFromSteamProfile();
 
-      if (previousSteamId !== data.profile.steamid || !state.steamLibrarySyncedAt || !state.steamAchievementsSyncedAt) {
+      if (
+        previousSteamId !== data.profile.steamid ||
+        !state.steamLibrarySyncedAt ||
+        !state.steamAchievementsSyncedAt ||
+        state.achievementSyncVersion !== ACHIEVEMENT_SYNC_SCHEMA_VERSION
+      ) {
         await syncSteamLibrary({ silent: true });
       }
     } else {
@@ -1195,6 +1271,7 @@ async function disconnectSteamProfile() {
     state.activeSession = null;
     state.steamLibrarySyncedAt = null;
     state.steamAchievementsSyncedAt = null;
+    state.achievementSyncVersion = 0;
 
     saveState();
     updateLoginGate();
@@ -1893,9 +1970,14 @@ function renderAchievements() {
       }).join("")
       : `
         <div class="achievement-complete">
-          Achievement sync is not available for this game yet.
+          ${game.achievementSyncAvailable === false
+            ? `Achievement sync is unavailable: ${escapeHtml(game.achievementSyncError || "Steam did not return achievement progress for this game.")}`
+            : "Achievement sync is not available for this game yet."}
         </div>
       `;
+    const syncNote = game.achievementSyncAvailable === false
+      ? "Achievement sync unavailable"
+      : `${unlocked}/${total} unlocked - ${missing.length} missing - ${percent}% complete`;
 
     const block = document.createElement("div");
 
@@ -1909,7 +1991,7 @@ function renderAchievements() {
 
         <span class="achievement-game-summary">
           <strong>${escapeHtml(game.name || "Unknown game")}</strong>
-          <small>${unlocked}/${total} unlocked - ${missing.length} missing - ${percent}% complete</small>
+          <small>${syncNote}</small>
           <span class="achievement-progress-bar">
             <span style="width:${percent}%"></span>
           </span>
@@ -2128,18 +2210,17 @@ async function fetchFriendAchievements(friend) {
       index += 1;
 
       try {
-        const response = await fetch(getApiUrl(`/api/steam/friends/${friend.steamid}/achievements/${game.appid}`));
+        const achievementResult = await fetchSteamAchievementsForSteamId(friend.steamid, game.appid);
 
-        if (!response.ok) continue;
+        if (!achievementResult.available) continue;
 
-        const data = await response.json();
-        const achievements = data.achievements || [];
+        const achievements = achievementResult.achievements || [];
         const unlocked = achievements.filter(achievement => achievement.unlocked).length;
 
         game.achievements = achievements;
         game.completion = achievements.length ? Math.round((unlocked / achievements.length) * 100) : 0;
       } catch (error) {
-        game.achievements = [];
+        console.error(error);
       }
     }
   }
