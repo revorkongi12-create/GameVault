@@ -58,6 +58,7 @@ const STEAM_LEGENDARY_PERCENT = 25;
 const ACTIVITY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_TICK_INTERVAL_MS = 30 * 1000;
 const ACHIEVEMENT_SYNC_SCHEMA_VERSION = 2;
+const PROFILE_SCOPED_STATE_VERSION = 1;
 const ACTIVITY_ICONS = {
   achievement:"✦",
   session:"▶",
@@ -112,8 +113,157 @@ const state = {
   keybinds: {}
 };
 
+const profileScopedStateKeys = [
+  "games",
+  "currentGameId",
+  "goals",
+  "activities",
+  "trophies",
+  "friends",
+  "selectedFriendSteamId",
+  "visibleFriendsCount",
+  "activeSession",
+  "sessionHistory",
+  "selectedTheme",
+  "selectedUiStyle",
+  "selectedBadge",
+  "customDisplayName",
+  "customAvatar",
+  "profileBio",
+  "profileBackground",
+  "profileBackgroundPreset",
+  "profileLayout",
+  "profileStatVisibility",
+  "steamExtras",
+  "steamLibrarySyncedAt",
+  "steamAchievementsSyncedAt",
+  "achievementSyncVersion",
+  "pinnedAchievementIds",
+  "pinnedGameIds"
+];
+
 function saveState() {
+  if (state.steamProfile?.steamid) {
+    saveProfileScopedState(state.steamProfile.steamid);
+  }
+
   localStorage.setItem("gameVault", JSON.stringify(state));
+}
+
+function getProfileStateStorageKey(steamid) {
+  return `gameVaultProfileState:${steamid}`;
+}
+
+function getDefaultProfileScopedState() {
+  return {
+    games: [],
+    currentGameId: null,
+    goals: [],
+    activities: [],
+    trophies: [],
+    friends: [],
+    selectedFriendSteamId: null,
+    visibleFriendsCount: 8,
+    activeSession: null,
+    sessionHistory: [],
+    selectedTheme: "default",
+    selectedUiStyle: "vault",
+    selectedBadge: "none",
+    customDisplayName: "",
+    customAvatar: "",
+    profileBio: "",
+    profileBackground: "",
+    profileBackgroundPreset: "vault",
+    profileLayout: "hero",
+    profileStatVisibility: {
+      totalHours:true,
+      games:true,
+      level:true,
+      score:true,
+      steamLevel:true,
+      libraryValue:true
+    },
+    steamExtras: null,
+    steamLibrarySyncedAt: null,
+    steamAchievementsSyncedAt: null,
+    achievementSyncVersion: 0,
+    pinnedAchievementIds: [],
+    pinnedGameIds: []
+  };
+}
+
+function getProfileScopedStateSnapshot() {
+  const snapshot = {};
+
+  profileScopedStateKeys.forEach(key => {
+    snapshot[key] = globalThis.structuredClone ? globalThis.structuredClone(state[key]) : JSON.parse(JSON.stringify(state[key]));
+  });
+
+  return snapshot;
+}
+
+function saveProfileScopedState(steamid) {
+  if (!steamid) return;
+
+  localStorage.setItem(getProfileStateStorageKey(steamid), JSON.stringify({
+    version:PROFILE_SCOPED_STATE_VERSION,
+    savedAt:Date.now(),
+    state:getProfileScopedStateSnapshot()
+  }));
+}
+
+function normalizeProfileScopedState() {
+  const defaults = getDefaultProfileScopedState();
+
+  Object.entries(defaults).forEach(([key, value]) => {
+    if (state[key] === undefined || state[key] === null && Array.isArray(value)) {
+      state[key] = globalThis.structuredClone ? globalThis.structuredClone(value) : JSON.parse(JSON.stringify(value));
+    }
+  });
+
+  if (!state.profileStatVisibility) state.profileStatVisibility = {};
+  state.profileStatVisibility = {
+    ...defaults.profileStatVisibility,
+    ...state.profileStatVisibility
+  };
+  if (!Array.isArray(state.goals)) state.goals = [];
+  if (!Array.isArray(state.activities)) state.activities = [];
+  if (!Array.isArray(state.trophies)) state.trophies = [];
+  if (!Array.isArray(state.friends)) state.friends = [];
+  if (!Array.isArray(state.sessionHistory)) state.sessionHistory = [];
+  if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
+  if (!Array.isArray(state.pinnedGameIds)) state.pinnedGameIds = [];
+  if (!state.visibleFriendsCount) state.visibleFriendsCount = 8;
+}
+
+function applyProfileScopedState(steamid) {
+  const saved = steamid ? localStorage.getItem(getProfileStateStorageKey(steamid)) : null;
+  const defaults = getDefaultProfileScopedState();
+  let scopedState = defaults;
+
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+
+      if (parsed.version === PROFILE_SCOPED_STATE_VERSION && parsed.state) {
+        scopedState = {
+          ...defaults,
+          ...parsed.state,
+          profileStatVisibility:{
+            ...defaults.profileStatVisibility,
+            ...(parsed.state.profileStatVisibility || {})
+          }
+        };
+      }
+    } catch (error) {
+      console.error("Could not load profile-specific GameVault state:", error);
+    }
+  }
+
+  profileScopedStateKeys.forEach(key => {
+    state[key] = globalThis.structuredClone ? globalThis.structuredClone(scopedState[key]) : JSON.parse(JSON.stringify(scopedState[key]));
+  });
+  normalizeProfileScopedState();
 }
 
 function isOldPlaceholderLibrary(games) {
@@ -1566,11 +1716,22 @@ async function refreshSteamProfile() {
 
     if (data.connected) {
       const previousSteamId = state.steamProfile?.steamid;
+      const nextSteamId = data.profile.steamid;
+
+      if (previousSteamId && previousSteamId !== nextSteamId) {
+        finishActiveSession();
+        saveProfileScopedState(previousSteamId);
+      }
+
+      if (previousSteamId !== nextSteamId) {
+        applyProfileScopedState(nextSteamId);
+      }
+
       state.steamProfile = data.profile;
       updateCurrentSessionFromSteamProfile();
 
       if (
-        previousSteamId !== data.profile.steamid ||
+        previousSteamId !== nextSteamId ||
         !state.steamLibrarySyncedAt ||
         !state.steamAchievementsSyncedAt ||
         state.achievementSyncVersion !== ACHIEVEMENT_SYNC_SCHEMA_VERSION
@@ -1578,14 +1739,25 @@ async function refreshSteamProfile() {
         queueSteamLibrarySync({ silent: true });
       }
     } else {
+      if (state.steamProfile?.steamid) {
+        saveProfileScopedState(state.steamProfile.steamid);
+      }
+
       finishActiveSession();
       state.steamProfile = null;
       state.games = [];
       state.currentGameId = null;
+      state.goals = [];
+      state.activities = [];
+      state.trophies = [];
       state.friends = [];
       state.selectedFriendSteamId = null;
+      state.sessionHistory = [];
+      state.pinnedAchievementIds = [];
+      state.pinnedGameIds = [];
       state.steamLibrarySyncedAt = null;
       state.steamAchievementsSyncedAt = null;
+      state.steamExtras = null;
     }
 
     saveState();
@@ -1609,6 +1781,10 @@ async function refreshSteamProfile() {
 
 async function disconnectSteamProfile() {
   try {
+    if (state.steamProfile?.steamid) {
+      saveProfileScopedState(state.steamProfile.steamid);
+    }
+
     await fetch(getApiUrl("/api/steam/logout"), {
       method:"POST"
     });
@@ -1616,9 +1792,16 @@ async function disconnectSteamProfile() {
     state.steamProfile = null;
     state.games = [];
     state.currentGameId = null;
+    state.goals = [];
+    state.activities = [];
+    state.trophies = [];
     state.friends = [];
     state.selectedFriendSteamId = null;
     state.activeSession = null;
+    state.sessionHistory = [];
+    state.pinnedAchievementIds = [];
+    state.pinnedGameIds = [];
+    state.steamExtras = null;
     state.steamLibrarySyncedAt = null;
     state.steamAchievementsSyncedAt = null;
     state.achievementSyncVersion = 0;
