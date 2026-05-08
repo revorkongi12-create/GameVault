@@ -424,19 +424,10 @@ function getQuickLaunchGames() {
   const pinnedGames = state.pinnedGameIds
     .map(id => state.games.find(game => getGameId(game) === String(id)))
     .filter(Boolean);
-  const recentGames = [...state.games]
-    .filter(game => game.lastPlayed || game.recentHours || String(game.appid) === String(state.steamProfile?.currentGameId))
-    .sort((a, b) => {
-      const aLive = String(a.appid) === String(state.steamProfile?.currentGameId) ? 1 : 0;
-      const bLive = String(b.appid) === String(state.steamProfile?.currentGameId) ? 1 : 0;
-
-      if (aLive !== bLive) return bLive - aLive;
-
-      return (b.lastPlayed || 0) - (a.lastPlayed || 0) || (b.recentHours || 0) - (a.recentHours || 0);
-    });
+  const recentGame = getRecentGame();
   const games = [];
 
-  [...pinnedGames, ...recentGames].forEach(game => {
+  [recentGame, ...pinnedGames].filter(Boolean).forEach(game => {
     if (!games.some(item => getGameId(item) === getGameId(game))) {
       games.push(game);
     }
@@ -503,7 +494,13 @@ const profileThemes = [
   { id:"green", name:"Vault Green" },
   { id:"red", name:"Vault Red" },
   { id:"purple", name:"Vault Purple" },
-  { id:"royal", name:"Royal Blue" }
+  { id:"royal", name:"Royal Blue" },
+  { id:"cyan", name:"Neon Cyan" },
+  { id:"pink", name:"Arcade Pink" },
+  { id:"silver", name:"Silver Steel" },
+  { id:"obsidian", name:"Obsidian" },
+  { id:"sunset", name:"Sunset" },
+  { id:"mint", name:"Mint" }
 ];
 
 const profileBadges = [
@@ -519,7 +516,10 @@ const profileBadges = [
 const uiStyles = [
   { id:"vault", name:"Vault Glass" },
   { id:"compact", name:"Compact" },
-  { id:"contrast", name:"High Contrast" }
+  { id:"contrast", name:"High Contrast" },
+  { id:"flat", name:"Flat Panels" },
+  { id:"arcade", name:"Arcade Glow" },
+  { id:"minimal", name:"Minimal Dark" }
 ];
 
 const profileBackgroundPresets = [
@@ -1588,13 +1588,7 @@ function showView(name) {
 }
 
 function triggerViewTransition() {
-  const main = document.querySelector(".main");
-
-  if (!main) return;
-
-  main.classList.remove("view-transitioning");
-  void main.offsetWidth;
-  main.classList.add("view-transitioning");
+  return;
 }
 
 function activateView(name) {
@@ -1891,7 +1885,7 @@ function renderQuickLaunchDock() {
 
   dock.classList.remove("hidden");
   dock.innerHTML = `
-    <div class="quick-launch-label">Quick Launch</div>
+    <div class="quick-launch-label">Recent + Pins</div>
 
     <div class="quick-launch-games">
       ${games.map(game => `
@@ -1939,109 +1933,143 @@ function renderSettings() {
   const steamExtrasLabel = steamExtrasInProgress ? "loading Steam level and value estimate..." : "not loaded yet";
 
   panel.innerHTML = `
-    <div class="placeholder-card">
-      <h1>Steam Account</h1>
-      <p>${state.steamProfile ? `Connected as ${state.steamProfile.username}` : "Not connected"}</p>
-      <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
-      <p>Steam level: ${state.steamExtras?.steamLevel || steamExtrasLabel}</p>
-      <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || steamExtrasLabel}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
-      <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : steamExtrasLabel}</p>
-      <p>${state.steamExtras?.valueNote || "Inventory value needs market-price support and is not shown yet."}</p>
-
-      <button id="openSteamProfileBtn" class="primary-btn">
-        Open Steam Profile
+    <div class="settings-dropdown">
+      <button class="settings-toggle-btn open" data-settings-target="steamSettingsPanel">
+        <span>
+          <strong>Steam Account</strong>
+          <small>${state.steamProfile ? `Connected as ${escapeHtml(state.steamProfile.username)}` : "Not connected"}</small>
+        </span>
+        <span class="achievement-chevron">v</span>
       </button>
 
-      <button id="syncSteamLibraryBtn" class="primary-btn">
-        Import Steam Library & Achievements
-      </button>
+      <div id="steamSettingsPanel" class="settings-panel">
+        <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
+        <p>Steam level: ${state.steamExtras?.steamLevel || steamExtrasLabel}</p>
+        <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || steamExtrasLabel}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
+        <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : steamExtrasLabel}</p>
+        <p>${state.steamExtras?.valueNote || "Inventory value needs market-price support and is not shown yet."}</p>
 
-      <button id="refreshSteamExtrasBtn" class="secondary-btn">
-        Refresh Steam Level & Value
-      </button>
+        <button id="openSteamProfileBtn" class="primary-btn">
+          Open Steam Profile
+        </button>
 
-      <button id="disconnectSteamBtn" class="primary-btn">
-        Disconnect Steam
-      </button>
-    </div>
+        <button id="syncSteamLibraryBtn" class="primary-btn">
+          Import Steam Library & Achievements
+        </button>
 
-    <div class="placeholder-card settings-card">
-      <h1>Profile Editing</h1>
+        <button id="refreshSteamExtrasBtn" class="secondary-btn">
+          Refresh Steam Level & Value
+        </button>
 
-      <label for="displayNameInput">Display Name</label>
-      <input id="displayNameInput" class="settings-input" type="text" value="${escapeHtml(state.customDisplayName)}" placeholder="Use Steam name" />
-
-      <label for="profileBioInput">Profile Bio</label>
-      <input id="profileBioInput" class="settings-input" type="text" value="${escapeHtml(state.profileBio)}" placeholder="Short profile line..." />
-
-      <label for="avatarInputSettings">Custom Avatar</label>
-      <input id="avatarInputSettings" class="settings-input" type="file" accept="image/*" />
-      <button id="clearAvatarBtn" class="secondary-btn">Use Steam Avatar</button>
-
-      <label for="profileBackgroundInput">Profile Background URL</label>
-      <input id="profileBackgroundInput" class="settings-input" type="url" value="${escapeHtml(state.profileBackground)}" placeholder="https://..." />
-
-      <label for="profileBackgroundPresetSelect">Background Preset</label>
-      <select id="profileBackgroundPresetSelect" class="settings-select">
-        ${profileBackgroundPresets.map(preset => `<option value="${preset.id}" ${state.profileBackgroundPreset === preset.id ? "selected" : ""}>${preset.name}</option>`).join("")}
-      </select>
-
-      <label for="profileLayoutSelect">Profile Layout</label>
-      <select id="profileLayoutSelect" class="settings-select">
-        ${profileLayouts.map(layout => `<option value="${layout.id}" ${state.profileLayout === layout.id ? "selected" : ""}>${layout.name}</option>`).join("")}
-      </select>
-
-      <div class="settings-toggle-grid">
-        ${Object.entries(profileStatLabels).map(([key, label]) => `
-          <label class="settings-toggle">
-            <input type="checkbox" data-profile-stat="${key}" ${state.profileStatVisibility[key] ? "checked" : ""} />
-            <span>${label}</span>
-          </label>
-        `).join("")}
+        <button id="disconnectSteamBtn" class="primary-btn">
+          Disconnect Steam
+        </button>
       </div>
-
-      <button id="resetProfileCustomizationBtn" class="secondary-btn">Reset Profile Customization</button>
     </div>
 
-    <div class="placeholder-card settings-card">
-      <h1>Profile Theme</h1>
-      <p>Colors are free to choose. Level rewards now unlock badges instead.</p>
+    <div class="settings-dropdown">
+      <button class="settings-toggle-btn" data-settings-target="profileSettingsPanel">
+        <span>
+          <strong>Profile Editing</strong>
+          <small>Name, bio, avatar, background, and visible stats.</small>
+        </span>
+        <span class="achievement-chevron">v</span>
+      </button>
 
-      <select id="themeSelect" class="settings-select">
-        ${unlockedThemes.map(theme => {
-          return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""}>${theme.name}</option>`;
-        }).join("")}
-      </select>
+      <div id="profileSettingsPanel" class="settings-panel hidden">
+        <label for="displayNameInput">Display Name</label>
+        <input id="displayNameInput" class="settings-input" type="text" value="${escapeHtml(state.customDisplayName)}" placeholder="Use Steam name" />
 
-      <label for="uiStyleSelect">UI Style</label>
-      <select id="uiStyleSelect" class="settings-select">
-        ${uiStyles.map(style => `<option value="${style.id}" ${state.selectedUiStyle === style.id ? "selected" : ""}>${style.name}</option>`).join("")}
-      </select>
+        <label for="profileBioInput">Profile Bio</label>
+        <input id="profileBioInput" class="settings-input" type="text" value="${escapeHtml(state.profileBio)}" placeholder="Short profile line..." />
 
-      <label for="badgeSelect">Display Badge</label>
-      <select id="badgeSelect" class="settings-select">
-        ${profileBadges.map(badge => {
-          const unlocked = unlockedBadges.some(item => item.id === badge.id);
+        <label for="avatarInputSettings">Custom Avatar</label>
+        <input id="avatarInputSettings" class="settings-input" type="file" accept="image/*" />
+        <button id="clearAvatarBtn" class="secondary-btn">Use Steam Avatar</button>
 
-          return `<option value="${badge.id}" ${state.selectedBadge === badge.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${badge.name}${unlocked ? "" : ` - Lvl ${badge.level}`}</option>`;
-        }).join("")}
-      </select>
-    </div>
+        <label for="profileBackgroundInput">Profile Background URL</label>
+        <input id="profileBackgroundInput" class="settings-input" type="url" value="${escapeHtml(state.profileBackground)}" placeholder="https://..." />
 
-    <div class="placeholder-card settings-card">
-      <h1>Keybinds</h1>
-      <p>Click a shortcut, then press the key you want to use.</p>
+        <label for="profileBackgroundPresetSelect">Background Preset</label>
+        <select id="profileBackgroundPresetSelect" class="settings-select">
+          ${profileBackgroundPresets.map(preset => `<option value="${preset.id}" ${state.profileBackgroundPreset === preset.id ? "selected" : ""}>${preset.name}</option>`).join("")}
+        </select>
 
-      <div class="keybind-grid">
-        ${Object.entries(keybindLabels).map(([action, label]) => `
-          <label class="keybind-row">
-            <span>${label}</span>
-            <input class="keybind-input" data-action="${action}" value="${state.keybinds[action] || keybindDefaults[action]}" readonly />
-          </label>
-        `).join("")}
+        <label for="profileLayoutSelect">Profile Layout</label>
+        <select id="profileLayoutSelect" class="settings-select">
+          ${profileLayouts.map(layout => `<option value="${layout.id}" ${state.profileLayout === layout.id ? "selected" : ""}>${layout.name}</option>`).join("")}
+        </select>
+
+        <div class="settings-toggle-grid">
+          ${Object.entries(profileStatLabels).map(([key, label]) => `
+            <label class="settings-toggle">
+              <input type="checkbox" data-profile-stat="${key}" ${state.profileStatVisibility[key] ? "checked" : ""} />
+              <span>${label}</span>
+            </label>
+          `).join("")}
+        </div>
+
+        <button id="resetProfileCustomizationBtn" class="secondary-btn">Reset Profile Customization</button>
       </div>
+    </div>
 
-      <button id="resetKeybindsBtn" class="primary-btn">Reset Keybinds</button>
+    <div class="settings-dropdown">
+      <button class="settings-toggle-btn" data-settings-target="themeSettingsPanel">
+        <span>
+          <strong>Theme & Style</strong>
+          <small>Colors, UI style, and level badges.</small>
+        </span>
+        <span class="achievement-chevron">v</span>
+      </button>
+
+      <div id="themeSettingsPanel" class="settings-panel hidden">
+        <p>Colors are free to choose. Level rewards now unlock badges instead.</p>
+
+        <select id="themeSelect" class="settings-select">
+          ${unlockedThemes.map(theme => {
+            return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""}>${theme.name}</option>`;
+          }).join("")}
+        </select>
+
+        <label for="uiStyleSelect">UI Style</label>
+        <select id="uiStyleSelect" class="settings-select">
+          ${uiStyles.map(style => `<option value="${style.id}" ${state.selectedUiStyle === style.id ? "selected" : ""}>${style.name}</option>`).join("")}
+        </select>
+
+        <label for="badgeSelect">Display Badge</label>
+        <select id="badgeSelect" class="settings-select">
+          ${profileBadges.map(badge => {
+            const unlocked = unlockedBadges.some(item => item.id === badge.id);
+
+            return `<option value="${badge.id}" ${state.selectedBadge === badge.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${badge.name}${unlocked ? "" : ` - Lvl ${badge.level}`}</option>`;
+          }).join("")}
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-dropdown">
+      <button class="settings-toggle-btn" data-settings-target="keybindSettingsPanel">
+        <span>
+          <strong>Keybinds</strong>
+          <small>Shortcuts for fullscreen and tabs.</small>
+        </span>
+        <span class="achievement-chevron">v</span>
+      </button>
+
+      <div id="keybindSettingsPanel" class="settings-panel hidden">
+        <p>Click a shortcut, then press the key you want to use.</p>
+
+        <div class="keybind-grid">
+          ${Object.entries(keybindLabels).map(([action, label]) => `
+            <label class="keybind-row">
+              <span>${label}</span>
+              <input class="keybind-input" data-action="${action}" value="${state.keybinds[action] || keybindDefaults[action]}" readonly />
+            </label>
+          `).join("")}
+        </div>
+
+        <button id="resetKeybindsBtn" class="primary-btn">Reset Keybinds</button>
+      </div>
     </div>
   `;
 
@@ -2196,6 +2224,17 @@ function renderSettings() {
     saveState();
     renderSettings();
   };
+
+  document.querySelectorAll(".settings-toggle-btn").forEach(button => {
+    button.onclick = () => {
+      const panel = document.getElementById(button.dataset.settingsTarget);
+
+      if (!panel) return;
+
+      panel.classList.toggle("hidden");
+      button.classList.toggle("open", !panel.classList.contains("hidden"));
+    };
+  });
 }
 
 function renderAppInfo() {
@@ -2570,30 +2609,61 @@ window.openGame = openGame;
 
 function renderGameDropdowns() {
   const game = getCurrentGame();
+  const searchWasFocused = document.activeElement?.id === "gameAchievementSearchInput";
+  const query = document.getElementById("gameAchievementSearchInput")?.value.trim().toLowerCase() || "";
+  const missingAchievements = game.achievements
+    .filter(achievement => !achievement.unlocked)
+    .filter(achievement => {
+      if (!query) return true;
+
+      return String(achievement.name || "").toLowerCase().includes(query) ||
+        String(achievement.description || "").toLowerCase().includes(query);
+    });
+
+  const achievementMarkup = missingAchievements
+    .sort((a, b) => {
+      const aPinned = isAchievementPinned(game, a);
+      const bPinned = isAchievementPinned(game, b);
+
+      if (aPinned !== bPinned) return Number(bPinned) - Number(aPinned);
+
+      return getAchievementRaritySortValue(a) - getAchievementRaritySortValue(b);
+    })
+    .map(achievement => `
+      <div class="list-item achievement-mini-row${getAchievementRarityClass(achievement)}${isAchievementPinned(game, achievement) ? " pinned-achievement" : ""}">
+        <span class="achievement-icon">${renderAchievementIcon(achievement)}</span>
+        <span>
+          <strong>${escapeHtml(achievement.name)}</strong>
+          <small>${isAchievementPinned(game, achievement) ? "Pinned hunt - " : ""}${formatAchievementPercent(achievement)}</small>
+        </span>
+      </div>
+    `)
+    .join("");
 
   document.getElementById("achievementsPanel").innerHTML =
     game.achievements.length
-      ? game.achievements
-        .filter(achievement => !achievement.unlocked)
-        .sort((a, b) => {
-          const aPinned = isAchievementPinned(game, a);
-          const bPinned = isAchievementPinned(game, b);
-
-          if (aPinned !== bPinned) return Number(bPinned) - Number(aPinned);
-
-          return getAchievementRaritySortValue(a) - getAchievementRaritySortValue(b);
-        })
-        .map(achievement => `
-          <div class="list-item achievement-mini-row${getAchievementRarityClass(achievement)}${isAchievementPinned(game, achievement) ? " pinned-achievement" : ""}">
-            <span class="achievement-icon">${renderAchievementIcon(achievement)}</span>
-            <span>
-              <strong>${escapeHtml(achievement.name)}</strong>
-              <small>${isAchievementPinned(game, achievement) ? "Pinned hunt - " : ""}${formatAchievementPercent(achievement)}</small>
-            </span>
-          </div>
-        `)
-        .join("") || `<div class="list-item">All tracked achievements completed.</div>`
+      ? `
+        <input
+          id="gameAchievementSearchInput"
+          class="achievement-search compact-search"
+          type="search"
+          placeholder="Search missing achievements..."
+          value="${escapeHtml(query)}"
+        />
+        ${missingAchievements.length ? achievementMarkup : `<div class="list-item">${query ? "No missing achievements match that search." : "All tracked achievements completed."}</div>`}
+      `
       : `<div class="list-item">Achievement sync is not available for this game yet.</div>`;
+
+  const gameAchievementSearchInput = document.getElementById("gameAchievementSearchInput");
+
+  if (gameAchievementSearchInput) {
+    gameAchievementSearchInput.oninput = renderGameDropdowns;
+
+    if (searchWasFocused) {
+      gameAchievementSearchInput.focus();
+      gameAchievementSearchInput.setSelectionRange(gameAchievementSearchInput.value.length, gameAchievementSearchInput.value.length);
+    }
+  }
 
   document.getElementById("goalsPanel").innerHTML =
     state.goals
@@ -2753,7 +2823,15 @@ function renderAchievements() {
   const searchInput = document.getElementById("achievementSearchInput");
   const query = searchInput?.value.trim().toLowerCase() || "";
   const visibleGames = sortGamesAlphabetically(state.games)
-    .filter(game => String(game.name || "").toLowerCase().includes(query));
+    .filter(game => {
+      if (!query) return true;
+
+      return String(game.name || "").toLowerCase().includes(query) ||
+        getGameAchievements(game).some(achievement => {
+          return String(achievement.name || "").toLowerCase().includes(query) ||
+            String(achievement.description || "").toLowerCase().includes(query);
+        });
+    });
 
   container.innerHTML = "";
 
@@ -2786,7 +2864,14 @@ function renderAchievements() {
     const safeGameId = String(game.id ?? game.appid ?? index).replace(/[^a-zA-Z0-9_-]/g, "");
     const listId = `achievementList-${safeGameId || index}`;
 
-    const sortedAchievements = [...achievements].sort((a, b) => {
+    const achievementsForQuery = query
+      ? achievements.filter(achievement => {
+        return String(game.name || "").toLowerCase().includes(query) ||
+          String(achievement.name || "").toLowerCase().includes(query) ||
+          String(achievement.description || "").toLowerCase().includes(query);
+      })
+      : achievements;
+    const sortedAchievements = [...achievementsForQuery].sort((a, b) => {
       const aRareMissing = !a.unlocked && isGameVaultRareAchievement(a);
       const bRareMissing = !b.unlocked && isGameVaultRareAchievement(b);
 

@@ -51,6 +51,54 @@ body[data-theme="royal"]{
   --theme-glow:rgba(79,124,255,.24);
 }
 
+body[data-theme="cyan"]{
+  --accent:#00d4ff;
+  --accent2:#00ffc8;
+  --theme-bg:#04161c;
+  --theme-bg2:#08262b;
+  --theme-glow:rgba(0,212,255,.24);
+}
+
+body[data-theme="pink"]{
+  --accent:#ff5ccf;
+  --accent2:#ff9a6b;
+  --theme-bg:#1b0617;
+  --theme-bg2:#321126;
+  --theme-glow:rgba(255,92,207,.23);
+}
+
+body[data-theme="silver"]{
+  --accent:#d8e1ea;
+  --accent2:#8fa7ba;
+  --theme-bg:#0b0f13;
+  --theme-bg2:#1d252d;
+  --theme-glow:rgba(216,225,234,.16);
+}
+
+body[data-theme="obsidian"]{
+  --accent:#a78bfa;
+  --accent2:#2dd4bf;
+  --theme-bg:#030306;
+  --theme-bg2:#0f1018;
+  --theme-glow:rgba(167,139,250,.2);
+}
+
+body[data-theme="sunset"]{
+  --accent:#ff7a45;
+  --accent2:#ffd166;
+  --theme-bg:#180b07;
+  --theme-bg2:#2a1710;
+  --theme-glow:rgba(255,122,69,.22);
+}
+
+body[data-theme="mint"]{
+  --accent:#9cffcb;
+  --accent2:#4ade80;
+  --theme-bg:#04120c;
+  --theme-bg2:#102419;
+  --theme-glow:rgba(156,255,203,.2);
+}
+
 *{
   box-sizing:border-box;
 }
@@ -143,14 +191,73 @@ body[data-ui-style="contrast"] .achievement-item{
   border:1px solid rgba(255,255,255,.14);
 }
 
+body[data-ui-style="flat"] .home-panel,
+body[data-ui-style="flat"] .placeholder-card,
+body[data-ui-style="flat"] .friend-profile-card,
+body[data-ui-style="flat"] .achievement-dropdown,
+body[data-ui-style="flat"] .hunting-panel,
+body[data-ui-style="flat"] .game-card{
+  box-shadow:none;
+  border-radius:8px;
+  background:color-mix(in srgb, var(--panel) 88%, #000);
+}
+
+body[data-ui-style="flat"] .sidebar,
+body[data-ui-style="flat"] .quick-launch-dock{
+  box-shadow:none;
+}
+
+body[data-ui-style="arcade"] .home-panel,
+body[data-ui-style="arcade"] .placeholder-card,
+body[data-ui-style="arcade"] .friend-profile-card,
+body[data-ui-style="arcade"] .achievement-dropdown,
+body[data-ui-style="arcade"] .hunting-panel{
+  border-color:color-mix(in srgb, var(--accent) 42%, rgba(255,255,255,.12));
+  box-shadow:0 0 24px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent2) 18%, transparent);
+}
+
+body[data-ui-style="arcade"] .nav-btn:hover,
+body[data-ui-style="arcade"] .nav-btn:active{
+  box-shadow:0 0 22px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+body[data-ui-style="minimal"]{
+  --panel:#101015;
+  --panel2:#171720;
+}
+
+body[data-ui-style="minimal"] .profile-bg,
+body[data-ui-style="minimal"] .main::before{
+  display:none;
+}
+
+body[data-ui-style="minimal"] .profile-command,
+body[data-ui-style="minimal"] .home-panel,
+body[data-ui-style="minimal"] .placeholder-card,
+body[data-ui-style="minimal"] .achievement-dropdown{
+  box-shadow:none;
+  border-radius:8px;
+}
+
 button,
 .game-card,
 .trophy-card,
 .achievement-game-toggle,
 .friend-row,
 .friend-game-card,
-.insight-toggle{
+.insight-toggle,
+.nav-btn,
+.dropdown-header,
+.achievement-pin-btn,
+.show-more-btn,
+.remove-trophy-btn,
+.goal-done-btn,
+.steam-chat-btn,
+.steam-disconnect-btn,
+.quick-launch-item,
+.library-source{
   will-change:transform,filter;
+  transition:transform .14s ease, filter .14s ease, background-color .14s ease, box-shadow .14s ease, border-color .14s ease;
 }
 
 button:active,
@@ -159,9 +266,19 @@ button:active,
 .achievement-game-toggle:active,
 .friend-row:active,
 .friend-game-card:active,
-.insight-toggle:active{
-  transform:scale(.985);
-  filter:brightness(1.08);
+.insight-toggle:active,
+.nav-btn:active,
+.dropdown-header:active,
+.achievement-pin-btn:active,
+.show-more-btn:active,
+.remove-trophy-btn:active,
+.goal-done-btn:active,
+.steam-chat-btn:active,
+.steam-disconnect-btn:active,
+.quick-launch-item:active{
+  transform:translateY(1px) scale(.985);
+  filter:brightness(1.12) saturate(1.08);
+  box-shadow:0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .hidden{
@@ -274,28 +391,26 @@ button:active,
 }
 
 .main.view-transitioning::before{
-  animation:vaultSparks .68s ease-out;
+  animation:none;
 }
 
 .view{
-  animation:viewSettle .28s ease-out both;
+  animation:viewSettle .18s ease-out both;
 }
 
 .view.view-entering{
-  animation:viewEnter .48s cubic-bezier(.2,.8,.2,1) both;
+  animation:viewEnter .2s ease-out both;
 }
 
 @keyframes viewEnter{
   from{
     opacity:0;
-    transform:translateY(12px) scale(.992);
-    filter:blur(5px);
+    transform:translateY(6px);
   }
 
   to{
     opacity:1;
-    transform:translateY(0) scale(1);
-    filter:blur(0);
+    transform:translateY(0);
   }
 }
 
@@ -800,6 +915,48 @@ button:active,
 
 .settings-card{
   margin-top:18px;
+}
+
+.settings-dropdown{
+  overflow:hidden;
+  margin-bottom:12px;
+  border-radius:14px;
+  background:var(--panel);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:0 12px 28px rgba(0,0,0,.22);
+}
+
+.settings-toggle-btn{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:16px;
+  border:none;
+  background:rgba(255,255,255,.045);
+  color:white;
+  text-align:left;
+  cursor:pointer;
+}
+
+.settings-toggle-btn strong,
+.settings-toggle-btn small{
+  display:block;
+}
+
+.settings-toggle-btn small{
+  margin-top:4px;
+  color:var(--muted);
+}
+
+.settings-toggle-btn.open .achievement-chevron{
+  transform:rotate(180deg);
+}
+
+.settings-panel{
+  padding:18px;
+  border-top:1px solid rgba(255,255,255,.06);
 }
 
 .keybind-grid{
@@ -1444,20 +1601,31 @@ button:active,
 }
 
 .achievement-item.rare-achievement{
-  border-color:color-mix(in srgb, var(--accent) 78%, rgba(255,255,255,.16));
+  position:relative;
+  border:2px solid color-mix(in srgb, var(--accent) 86%, rgba(255,255,255,.2));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 28%, rgba(255,255,255,.06)), rgba(255,255,255,.05));
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 34%, rgba(255,255,255,.06)), rgba(255,255,255,.05));
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 22%, transparent),
-    0 0 22px color-mix(in srgb, var(--accent) 36%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 34%, transparent),
+    0 0 26px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.achievement-item.rare-achievement::before{
+  content:"";
+  position:absolute;
+  inset:4px;
+  pointer-events:none;
+  border-radius:9px;
+  border:1px solid color-mix(in srgb, var(--accent2) 54%, transparent);
+  opacity:.72;
 }
 
 .achievement-item.legendary-achievement,
 .achievement-item.hard-achievement{
-  border-color:color-mix(in srgb, var(--accent2) 86%, rgba(255,255,255,.2));
+  border:2px solid color-mix(in srgb, var(--accent2) 92%, rgba(255,255,255,.24));
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 34%, transparent),
-    0 0 28px color-mix(in srgb, var(--accent2) 42%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 34px color-mix(in srgb, var(--accent2) 52%, transparent);
 }
 
 .achievement-item.pinned-achievement{
@@ -1688,13 +1856,14 @@ button:active,
 }
 
 .hunting-target.rare-achievement{
-  border:1px solid color-mix(in srgb, var(--accent) 62%, rgba(255,255,255,.08));
+  border:2px solid color-mix(in srgb, var(--accent) 76%, rgba(255,255,255,.12));
+  box-shadow:0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .hunting-target.legendary-achievement,
 .hunting-target.hard-achievement{
-  border:1px solid color-mix(in srgb, var(--accent2) 78%, rgba(255,255,255,.12));
-  box-shadow:0 0 18px color-mix(in srgb, var(--accent2) 30%, transparent);
+  border:2px solid color-mix(in srgb, var(--accent2) 88%, rgba(255,255,255,.16));
+  box-shadow:0 0 22px color-mix(in srgb, var(--accent2) 38%, transparent);
 }
 
 .achievement-chevron{
