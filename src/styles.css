@@ -1502,6 +1502,20 @@ body{
   color:var(--muted);
 }
 
+.gamevault-level-badge{
+  display:inline-flex;
+  align-items:center;
+  max-width:100%;
+  margin:0 0 12px;
+  padding:6px 10px;
+  border-radius:999px;
+  color:#fff4dc;
+  background:linear-gradient(135deg,var(--accent),var(--accent-strong));
+  box-shadow:0 8px 18px color-mix(in srgb,var(--accent) 26%,transparent);
+  font-size:.82rem;
+  font-weight:800;
+}
+
 .friend-profile-actions{
   display:flex;
   flex-wrap:wrap;

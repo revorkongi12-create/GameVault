@@ -23,6 +23,7 @@ const steamAppDetailsCache = new Map();
 const userDataPath = path.join(process.env.APPDATA || __dirname, "GameVault");
 const savedProfilePath = path.join(userDataPath, "steam-profile.json");
 const savedProfilesPath = path.join(userDataPath, "steam-profiles.json");
+const savedGameVaultProfilesPath = path.join(userDataPath, "gamevault-public-profiles.json");
 
 function loadSavedSteamProfiles() {
   try {
@@ -48,6 +49,22 @@ function loadSavedSteamProfiles() {
 }
 
 const steamProfiles = loadSavedSteamProfiles();
+const gameVaultProfiles = loadSavedGameVaultProfiles();
+
+function loadSavedGameVaultProfiles() {
+  try {
+    if (!fs.existsSync(savedGameVaultProfilesPath)) {
+      return new Map();
+    }
+
+    const savedProfiles = JSON.parse(fs.readFileSync(savedGameVaultProfilesPath, "utf8"));
+
+    return new Map(Object.entries(savedProfiles.profiles || {}));
+  } catch (error) {
+    console.error("Could not load saved GameVault profiles:", error.message);
+    return new Map();
+  }
+}
 
 function saveSteamProfiles() {
   try {
@@ -63,6 +80,18 @@ function saveSteamProfiles() {
 
 function getClientId(req, { allowDefault = false } = {}) {
   return req.query.clientId || req.get("x-gamevault-client-id") || (allowDefault ? DEFAULT_CLIENT_ID : null);
+}
+
+function saveGameVaultProfiles() {
+  try {
+    fs.mkdirSync(userDataPath, { recursive:true });
+    fs.writeFileSync(savedGameVaultProfilesPath, JSON.stringify({
+      version:1,
+      profiles:Object.fromEntries(gameVaultProfiles)
+    }, null, 2));
+  } catch (error) {
+    console.error("Could not save GameVault profiles:", error.message);
+  }
 }
 
 function getSteamReturnUrl(clientId) {
@@ -102,6 +131,13 @@ function clearSteamProfile(req) {
   const clientId = getClientId(req);
 
   if (clientId) {
+    const steamProfile = steamProfiles.get(clientId);
+
+    if (steamProfile?.steamid) {
+      gameVaultProfiles.delete(steamProfile.steamid);
+      saveGameVaultProfiles();
+    }
+
     steamProfiles.delete(clientId);
   }
 
@@ -181,6 +217,8 @@ app.use(cors({
     callback(null, allowedOrigins.includes(origin));
   }
 }));
+
+app.use(express.json({ limit:"50kb" }));
 
 app.get("/", (req, res) => {
   res.json({
@@ -285,6 +323,36 @@ app.get("/api/steam/profile", async (req, res) => {
 
 app.post("/api/steam/logout", (req, res) => {
   clearSteamProfile(req);
+
+  res.json({ success:true });
+});
+
+app.post("/api/gamevault/profile", (req, res) => {
+  const steamProfile = getSteamProfile(req);
+
+  if (!steamProfile) {
+    return res.status(401).json({ error:"No Steam account connected." });
+  }
+
+  const level = Number(req.body?.level) || 1;
+  const xp = Number(req.body?.xp) || 0;
+
+  gameVaultProfiles.set(steamProfile.steamid, {
+    steamid:steamProfile.steamid,
+    username:steamProfile.username,
+    avatar:steamProfile.avatar,
+    profileUrl:steamProfile.profileUrl,
+    level:Math.max(1, Math.min(999, Math.floor(level))),
+    xp:Math.max(0, Math.floor(xp)),
+    title:String(req.body?.title || ""),
+    totalHours:Math.max(0, Math.floor(Number(req.body?.totalHours) || 0)),
+    gamesOwned:Math.max(0, Math.floor(Number(req.body?.gamesOwned) || 0)),
+    achievementsUnlocked:Math.max(0, Math.floor(Number(req.body?.achievementsUnlocked) || 0)),
+    achievementsTotal:Math.max(0, Math.floor(Number(req.body?.achievementsTotal) || 0)),
+    theme:String(req.body?.theme || "default"),
+    updatedAt:Date.now()
+  });
+  saveGameVaultProfiles();
 
   res.json({ success:true });
 });
@@ -567,7 +635,8 @@ app.get("/api/steam/friends", async (req, res) => {
         status:friend.personastate || 0,
         currentGame:friend.gameextrainfo || "",
         currentGameId:friend.gameid || "",
-        lastOnline:friend.lastlogoff || 0
+        lastOnline:friend.lastlogoff || 0,
+        gameVaultProfile:gameVaultProfiles.get(friend.steamid) || null
       }))
     });
   } catch (error) {

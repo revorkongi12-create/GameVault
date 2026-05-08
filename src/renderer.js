@@ -1105,6 +1105,7 @@ async function syncSteamLibrary({ silent = false } = {}) {
 
     saveState();
     renderHome();
+    await publishGameVaultProfile();
 
     return true;
   } catch (error) {
@@ -1115,6 +1116,37 @@ async function syncSteamLibrary({ silent = false } = {}) {
     }
 
     return false;
+  }
+}
+
+function getGameVaultPublicProfile() {
+  const levelData = getLevelData();
+
+  return {
+    level:levelData.level,
+    xp:levelData.xp,
+    title:getLevelTitle(levelData.level),
+    totalHours:getTotalHours(),
+    gamesOwned:state.games.length,
+    achievementsUnlocked:getUnlockedAchievements(),
+    achievementsTotal:getTotalAchievements(),
+    theme:state.selectedTheme
+  };
+}
+
+async function publishGameVaultProfile() {
+  if (!state.steamProfile) return;
+
+  try {
+    await fetch(getApiUrl("/api/gamevault/profile"), {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify(getGameVaultPublicProfile())
+    });
+  } catch (error) {
+    console.error("Could not publish GameVault profile:", error);
   }
 }
 
@@ -1248,6 +1280,10 @@ async function refreshSteamProfile() {
 
     saveState();
     updateLoginGate();
+
+    if (state.steamProfile) {
+      await publishGameVaultProfile();
+    }
 
     return state.steamProfile;
   } catch (error) {
@@ -1415,6 +1451,7 @@ function renderSettings() {
     saveState();
     applySelectedTheme();
     renderHome();
+    publishGameVaultProfile();
   };
 
   document.querySelectorAll(".keybind-input").forEach(input => {
@@ -2270,6 +2307,13 @@ function getFriendStats(friend) {
   }, 0);
   const totalAchievements = games.reduce((sum, game) => sum + getGameAchievements(game).length, 0);
   const levelData = getLevelDataFromXp(unlockedAchievements * 10);
+  const gameVaultLevel = Number(friend.gameVaultProfile?.level) || 0;
+  const displayLevelData = gameVaultLevel
+    ? {
+      ...getLevelDataFromXp(Number(friend.gameVaultProfile?.xp) || 0),
+      level:gameVaultLevel
+    }
+    : levelData;
   const recentGame = games.reduce((latest, game) => {
     if (!latest || game.lastPlayed > latest.lastPlayed) return game;
     return latest;
@@ -2282,6 +2326,7 @@ function getFriendStats(friend) {
     unlockedAchievements,
     totalAchievements,
     levelData,
+    displayLevelData,
     recentGame,
     mostPlayed
   };
@@ -2354,7 +2399,7 @@ async function renderFriends() {
 
           <span>
             <strong>${friend.username}</strong>
-            <small>${friend.currentGame ? `Playing ${friend.currentGame}` : getPersonaStatusLabel(friend.status)}</small>
+            <small>${friend.gameVaultProfile?.level ? `GameVault Lvl ${friend.gameVaultProfile.level} - ` : ""}${friend.currentGame ? `Playing ${friend.currentGame}` : getPersonaStatusLabel(friend.status)}</small>
           </span>
         </button>
       `).join("")}
@@ -2427,6 +2472,7 @@ async function renderFriendProfile(steamid) {
         <div>
           <h2>${friend.username}</h2>
           <p>${friend.currentGame ? `Playing ${friend.currentGame}` : getPersonaStatusLabel(friend.status)}</p>
+          ${friend.gameVaultProfile?.level ? `<span class="gamevault-level-badge">GameVault Lvl ${friend.gameVaultProfile.level} - ${escapeHtml(friend.gameVaultProfile.title || getLevelTitle(friend.gameVaultProfile.level))}</span>` : ""}
 
           <div class="friend-profile-actions">
             <button
@@ -2466,8 +2512,8 @@ async function renderFriendProfile(steamid) {
         </div>
 
         <div class="stat-box">
-          <strong>${friend.libraryPrivate || !stats.totalAchievements ? "--" : `Lvl ${stats.levelData.level}`}</strong>
-          <small>Public Level</small>
+          <strong>${friend.gameVaultProfile?.level ? `Lvl ${stats.displayLevelData.level}` : friend.libraryPrivate || !stats.totalAchievements ? "--" : `Lvl ${stats.levelData.level}`}</strong>
+          <small>${friend.gameVaultProfile?.level ? "GameVault Level" : "Public Level"}</small>
         </div>
 
         <div class="stat-box">
