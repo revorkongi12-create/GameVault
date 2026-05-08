@@ -88,8 +88,19 @@ const state = {
   selectedUiStyle: "vault",
   selectedBadge: "none",
   customDisplayName: "",
+  customAvatar: "",
   profileBio: "",
   profileBackground: "",
+  profileBackgroundPreset: "vault",
+  profileLayout: "hero",
+  profileStatVisibility: {
+    totalHours:true,
+    games:true,
+    level:true,
+    score:true,
+    steamLevel:true,
+    libraryValue:true
+  },
   steamExtras: null,
   steamProfile: null,
   steamLibrarySyncedAt: null,
@@ -136,8 +147,21 @@ function loadState() {
     if (!("selectedUiStyle" in state)) state.selectedUiStyle = "vault";
     if (!("selectedBadge" in state)) state.selectedBadge = "none";
     if (!("customDisplayName" in state)) state.customDisplayName = "";
+    if (!("customAvatar" in state)) state.customAvatar = "";
     if (!("profileBio" in state)) state.profileBio = "";
     if (!("profileBackground" in state)) state.profileBackground = "";
+    if (!("profileBackgroundPreset" in state)) state.profileBackgroundPreset = "vault";
+    if (!("profileLayout" in state)) state.profileLayout = "hero";
+    if (!state.profileStatVisibility) state.profileStatVisibility = {};
+    state.profileStatVisibility = {
+      totalHours:true,
+      games:true,
+      level:true,
+      score:true,
+      steamLevel:true,
+      libraryValue:true,
+      ...state.profileStatVisibility
+    };
     if (!("steamExtras" in state)) state.steamExtras = null;
     if (!("steamProfile" in state)) state.steamProfile = null;
     if (!("steamLibrarySyncedAt" in state)) state.steamLibrarySyncedAt = null;
@@ -184,8 +208,19 @@ function loadState() {
     state.selectedUiStyle = "vault";
     state.selectedBadge = "none";
     state.customDisplayName = "";
+    state.customAvatar = "";
     state.profileBio = "";
     state.profileBackground = "";
+    state.profileBackgroundPreset = "vault";
+    state.profileLayout = "hero";
+    state.profileStatVisibility = {
+      totalHours:true,
+      games:true,
+      level:true,
+      score:true,
+      steamLevel:true,
+      libraryValue:true
+    };
     state.steamExtras = null;
     state.steamProfile = null;
     state.steamLibrarySyncedAt = null;
@@ -336,6 +371,29 @@ const uiStyles = [
   { id:"contrast", name:"High Contrast" }
 ];
 
+const profileBackgroundPresets = [
+  { id:"vault", name:"Vault Gradient" },
+  { id:"nebula", name:"Nebula" },
+  { id:"ember", name:"Ember" },
+  { id:"ocean", name:"Ocean" },
+  { id:"forest", name:"Forest" }
+];
+
+const profileLayouts = [
+  { id:"hero", name:"Hero" },
+  { id:"split", name:"Split" },
+  { id:"minimal", name:"Minimal" }
+];
+
+const profileStatLabels = {
+  totalHours:"Total Hours",
+  games:"Games",
+  level:"GameVault Level",
+  score:"Score",
+  steamLevel:"Steam Level",
+  libraryValue:"Library Value"
+};
+
 const keybindDefaults = {
   toggleFullscreen:"F11",
   home:"1",
@@ -397,6 +455,23 @@ function getUnlockedBadges() {
 
 function getSelectedBadge() {
   return profileBadges.find(badge => badge.id === state.selectedBadge) || profileBadges[0];
+}
+
+function getProfileBackgroundStyle() {
+  if (state.profileBackground) {
+    return `linear-gradient(to right, rgba(0,0,0,.72), rgba(0,0,0,.18)), url("${state.profileBackground.replace(/"/g, "%22")}")`;
+  }
+
+  const preset = state.profileBackgroundPreset || "vault";
+  const backgrounds = {
+    vault:"radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 45%, transparent), transparent 30%), linear-gradient(135deg,#1e2a44,#24113f,#0f1018)",
+    nebula:"radial-gradient(circle at 20% 20%, rgba(185,131,255,.42), transparent 30%), radial-gradient(circle at 78% 42%, rgba(102,192,244,.28), transparent 32%), linear-gradient(135deg,#0b0920,#21113a,#071521)",
+    ember:"radial-gradient(circle at 22% 18%, rgba(255,191,105,.42), transparent 28%), radial-gradient(circle at 74% 58%, rgba(255,93,115,.28), transparent 34%), linear-gradient(135deg,#201007,#2a1015,#0d0909)",
+    ocean:"radial-gradient(circle at 16% 22%, rgba(102,192,244,.38), transparent 30%), radial-gradient(circle at 76% 70%, rgba(86,214,138,.18), transparent 34%), linear-gradient(135deg,#061423,#0d2a36,#070b12)",
+    forest:"radial-gradient(circle at 18% 24%, rgba(86,214,138,.36), transparent 30%), radial-gradient(circle at 80% 54%, rgba(255,191,105,.16), transparent 34%), linear-gradient(135deg,#06130d,#10291b,#080d0a)"
+  };
+
+  return backgrounds[preset] || backgrounds.vault;
 }
 
 function applySelectedTheme() {
@@ -1279,9 +1354,12 @@ function getGameVaultPublicProfile() {
     gamesOwned:state.games.length,
     achievementsUnlocked:getUnlockedAchievements(),
     achievementsTotal:getTotalAchievements(),
+    libraryValue:state.steamExtras?.libraryValue?.currentValueCents || 0,
     theme:state.selectedTheme,
     badge:getSelectedBadge().name,
-    displayName:state.customDisplayName || state.steamProfile?.username || ""
+    displayName:state.customDisplayName || state.steamProfile?.username || "",
+    profileBio:state.profileBio,
+    profileLayout:state.profileLayout
   };
 }
 
@@ -1673,7 +1751,9 @@ function renderSettings() {
       <p>${state.steamProfile ? `Connected as ${state.steamProfile.username}` : "Not connected"}</p>
       <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
       <p>Steam level: ${state.steamExtras?.steamLevel || "not loaded yet"}</p>
-      <p>${state.steamExtras?.valueNote || "Steam value and inventory estimates are being prepared for the 1.1.0 pass."}</p>
+      <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || "estimating after Steam sync"}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
+      <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : "not loaded yet"}</p>
+      <p>${state.steamExtras?.valueNote || "Inventory value needs market-price support and is not shown yet."}</p>
 
       <button id="openSteamProfileBtn" class="primary-btn">
         Open Steam Profile
@@ -1697,8 +1777,31 @@ function renderSettings() {
       <label for="profileBioInput">Profile Bio</label>
       <input id="profileBioInput" class="settings-input" type="text" value="${escapeHtml(state.profileBio)}" placeholder="Short profile line..." />
 
+      <label for="avatarInputSettings">Custom Avatar</label>
+      <input id="avatarInputSettings" class="settings-input" type="file" accept="image/*" />
+      <button id="clearAvatarBtn" class="secondary-btn">Use Steam Avatar</button>
+
       <label for="profileBackgroundInput">Profile Background URL</label>
       <input id="profileBackgroundInput" class="settings-input" type="url" value="${escapeHtml(state.profileBackground)}" placeholder="https://..." />
+
+      <label for="profileBackgroundPresetSelect">Background Preset</label>
+      <select id="profileBackgroundPresetSelect" class="settings-select">
+        ${profileBackgroundPresets.map(preset => `<option value="${preset.id}" ${state.profileBackgroundPreset === preset.id ? "selected" : ""}>${preset.name}</option>`).join("")}
+      </select>
+
+      <label for="profileLayoutSelect">Profile Layout</label>
+      <select id="profileLayoutSelect" class="settings-select">
+        ${profileLayouts.map(layout => `<option value="${layout.id}" ${state.profileLayout === layout.id ? "selected" : ""}>${layout.name}</option>`).join("")}
+      </select>
+
+      <div class="settings-toggle-grid">
+        ${Object.entries(profileStatLabels).map(([key, label]) => `
+          <label class="settings-toggle">
+            <input type="checkbox" data-profile-stat="${key}" ${state.profileStatVisibility[key] ? "checked" : ""} />
+            <span>${label}</span>
+          </label>
+        `).join("")}
+      </div>
     </div>
 
     <div class="placeholder-card settings-card">
@@ -1785,6 +1888,47 @@ function renderSettings() {
       if (id === "profileBioInput") state.profileBio = event.target.value.trim();
       if (id === "profileBackgroundInput") state.profileBackground = event.target.value.trim();
 
+      saveState();
+      renderHome();
+    };
+  });
+
+  document.getElementById("profileBackgroundPresetSelect").onchange = event => {
+    state.profileBackgroundPreset = event.target.value;
+    saveState();
+    renderHome();
+  };
+
+  document.getElementById("profileLayoutSelect").onchange = event => {
+    state.profileLayout = event.target.value;
+    saveState();
+    renderHome();
+  };
+
+  document.getElementById("clearAvatarBtn").onclick = () => {
+    state.customAvatar = "";
+    saveState();
+    renderHome();
+  };
+
+  document.getElementById("avatarInputSettings").onchange = event => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      state.customAvatar = String(reader.result || "");
+      saveState();
+      renderHome();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  document.querySelectorAll("[data-profile-stat]").forEach(input => {
+    input.onchange = event => {
+      state.profileStatVisibility[event.target.dataset.profileStat] = event.target.checked;
       saveState();
       renderHome();
     };
@@ -1903,24 +2047,27 @@ function renderProfile() {
   const profileName = document.getElementById("profileName");
   const profileTagline = document.getElementById("profileTagline");
   const avatarImg = document.getElementById("avatarImg");
+  const profileCommand = document.querySelector(".profile-command");
   const profileBg = document.querySelector(".profile-bg");
   const displayName = state.customDisplayName || state.steamProfile?.username || "Player";
   const tagline = state.profileBio || getLevelTitle(levelData.level);
 
+  if (profileCommand) {
+    profileCommand.dataset.layout = state.profileLayout || "hero";
+  }
+
   if (profileBg) {
-    profileBg.style.backgroundImage = state.profileBackground
-      ? `linear-gradient(to right, rgba(0,0,0,.72), rgba(0,0,0,.18)), url("${state.profileBackground.replace(/"/g, "%22")}")`
-      : "";
+    profileBg.style.backgroundImage = getProfileBackgroundStyle();
   }
 
   if (state.steamProfile) {
     profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
     profileTagline.textContent = tagline;
-    avatarImg.src = state.steamProfile.avatar;
+    avatarImg.src = state.customAvatar || state.steamProfile.avatar;
   } else {
     profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
     profileTagline.textContent = tagline;
-    avatarImg.src = "https://via.placeholder.com/100";
+    avatarImg.src = state.customAvatar || "https://via.placeholder.com/100";
   }
 
   document.getElementById("totalHours").textContent = `${getTotalHours()}h`;
@@ -1928,6 +2075,17 @@ function renderProfile() {
   document.getElementById("userLevel").textContent = `Lvl ${levelData.level}`;
   document.getElementById("achievementScore").textContent = getAchievementScore();
   document.getElementById("steamLevel").textContent = state.steamExtras?.steamLevel || "--";
+  document.getElementById("libraryValue").textContent = state.steamExtras?.libraryValue?.currentValueFormatted || "--";
+  [
+    ["totalHours", "totalHours"],
+    ["gamesOwned", "games"],
+    ["userLevel", "level"],
+    ["achievementScore", "score"],
+    ["steamLevel", "steamLevel"],
+    ["libraryValue", "libraryValue"]
+  ].forEach(([elementId, statKey]) => {
+    document.getElementById(elementId)?.closest(".stat-box")?.classList.toggle("hidden", !state.profileStatVisibility[statKey]);
+  });
   document.getElementById("xpFill").style.width = `${levelData.percent}%`;
   document.getElementById("xpText").textContent = `${levelData.current}/${levelData.needed} XP to Level ${levelData.level + 1}`;
 }

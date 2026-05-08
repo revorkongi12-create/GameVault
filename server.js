@@ -20,6 +20,7 @@ const PROFILE_STORE_VERSION = 2;
 
 const steamSchemaCache = new Map();
 const steamAppDetailsCache = new Map();
+const steamPriceCache = new Map();
 const userDataPath = path.join(process.env.APPDATA || __dirname, "GameVault");
 const savedProfilePath = path.join(userDataPath, "steam-profile.json");
 const savedProfilesPath = path.join(userDataPath, "steam-profiles.json");
@@ -206,6 +207,138 @@ async function getSteamProfileBySteamId(steamid) {
   };
 }
 
+function formatCurrencyFromCents(cents, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style:"currency",
+    currency
+  }).format((Number(cents) || 0) / 100);
+}
+
+async function getSteamPriceOverview(appid) {
+  const key = String(appid);
+
+  if (steamPriceCache.has(key)) {
+    return steamPriceCache.get(key);
+  }
+
+  try {
+    const response = await axios.get("https://store.steampowered.com/api/appdetails", {
+      params:{
+        appids:appid,
+        filters:"price_overview,basic",
+        cc:"us"
+      }
+    });
+    const data = response.data?.[key]?.data || {};
+    const price = data.price_overview || null;
+    const payload = {
+      appid:Number(appid),
+      name:data.name || "",
+      currency:price?.currency || "USD",
+      initial:price?.initial || 0,
+      final:price?.final || 0,
+      discountPercent:price?.discount_percent || 0,
+      priced:Boolean(price)
+    };
+
+    steamPriceCache.set(key, payload);
+
+    return payload;
+  } catch (error) {
+    const payload = {
+      appid:Number(appid),
+      name:"",
+      currency:"USD",
+      initial:0,
+      final:0,
+      discountPercent:0,
+      priced:false,
+      error:error.message
+    };
+
+    steamPriceCache.set(key, payload);
+
+    return payload;
+  }
+}
+
+async function getSteamLibraryValueEstimate(steamid) {
+  const ownedResponse = await axios.get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/", {
+    params:{
+      key:STEAM_API_KEY,
+      steamid,
+      include_appinfo:true,
+      include_played_free_games:true,
+      format:"json"
+    }
+  });
+  const games = ownedResponse.data.response?.games || [];
+  const appids = games
+    .map(game => game.appid)
+    .filter(Boolean);
+  const prices = [];
+  let index = 0;
+  const concurrency = 6;
+
+  async function worker() {
+    while (index < appids.length) {
+      const appid = appids[index];
+      index += 1;
+
+      prices.push(await getSteamPriceOverview(appid));
+    }
+  }
+
+  await Promise.all(Array.from({ length:Math.min(concurrency, appids.length) }, worker));
+
+  const pricedGames = prices.filter(price => price.priced);
+  const currency = pricedGames[0]?.currency || "USD";
+  const fullValueCents = pricedGames.reduce((sum, price) => sum + (price.initial || price.final || 0), 0);
+  const currentValueCents = pricedGames.reduce((sum, price) => sum + (price.final || 0), 0);
+
+  return {
+    gameCount:games.length,
+    pricedGameCount:pricedGames.length,
+    unpricedGameCount:Math.max(0, games.length - pricedGames.length),
+    currency,
+    fullValueCents,
+    currentValueCents,
+    fullValueFormatted:formatCurrencyFromCents(fullValueCents, currency),
+    currentValueFormatted:formatCurrencyFromCents(currentValueCents, currency),
+    note:"Estimated from public Steam Store US pricing. Free, delisted, region-limited, bundled, and unavailable games may not have a price."
+  };
+}
+
+async function getSteamInventorySummary(steamid) {
+  try {
+    const response = await axios.get(`https://steamcommunity.com/inventory/${steamid}/753/6`, {
+      params:{
+        l:"en",
+        count:5000
+      }
+    });
+    const assets = response.data.assets || [];
+    const descriptions = response.data.descriptions || [];
+    const marketableCount = descriptions.filter(item => item.marketable).length;
+
+    return {
+      public:true,
+      itemCount:assets.length,
+      marketableItemCount:marketableCount,
+      formatted:"Market pricing unavailable",
+      note:"Steam inventory is public enough to count items, but GameVault still needs a market-price source before showing a money value."
+    };
+  } catch (error) {
+    return {
+      public:false,
+      itemCount:0,
+      marketableItemCount:0,
+      formatted:"Private or unavailable",
+      note:"Steam did not expose this inventory publicly, or the inventory endpoint was unavailable."
+    };
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
     if (CORS_ORIGIN === "*" || !origin) {
@@ -349,9 +482,12 @@ app.post("/api/gamevault/profile", (req, res) => {
     gamesOwned:Math.max(0, Math.floor(Number(req.body?.gamesOwned) || 0)),
     achievementsUnlocked:Math.max(0, Math.floor(Number(req.body?.achievementsUnlocked) || 0)),
     achievementsTotal:Math.max(0, Math.floor(Number(req.body?.achievementsTotal) || 0)),
+    libraryValue:Math.max(0, Math.floor(Number(req.body?.libraryValue) || 0)),
     theme:String(req.body?.theme || "default"),
     badge:String(req.body?.badge || ""),
     displayName:String(req.body?.displayName || steamProfile.username),
+    profileBio:String(req.body?.profileBio || ""),
+    profileLayout:String(req.body?.profileLayout || "hero"),
     updatedAt:Date.now()
   });
   saveGameVaultProfiles();
@@ -431,18 +567,22 @@ app.get("/api/steam/extras", async (req, res) => {
   }
 
   try {
-    const levelResponse = await axios.get("https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/", {
-      params:{
-        key:STEAM_API_KEY,
-        steamid:steamProfile.steamid
-      }
-    });
+    const [levelResponse, libraryValue, inventoryValue] = await Promise.all([
+      axios.get("https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/", {
+        params:{
+          key:STEAM_API_KEY,
+          steamid:steamProfile.steamid
+        }
+      }),
+      getSteamLibraryValueEstimate(steamProfile.steamid),
+      getSteamInventorySummary(steamProfile.steamid)
+    ]);
 
     res.json({
       steamLevel:levelResponse.data.response?.player_level || 0,
-      libraryValue:null,
-      inventoryValue:null,
-      valueNote:"Library and inventory values need market pricing data and will be estimated in a later 1.1 pass."
+      libraryValue,
+      inventoryValue,
+      valueNote:"Library value is an estimate from Steam Store pricing. Inventory value still needs market-price support and is not shown yet."
     });
   } catch (error) {
     res.status(500).json({
