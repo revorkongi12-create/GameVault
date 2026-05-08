@@ -339,6 +339,12 @@ function isSteamLegendaryAchievement(achievement) {
     (percent !== null && percent <= STEAM_LEGENDARY_PERCENT);
 }
 
+function isGameVaultRareAchievement(achievement) {
+  const rarity = getAchievementRarityLabel(achievement);
+
+  return ["hard", "legendary", "rare"].includes(rarity);
+}
+
 function formatAchievementPercent(achievement) {
   const percent = getAchievementPercent(achievement);
 
@@ -353,11 +359,12 @@ function getLegendaryAchievements(game) {
 
 function getAchievementRaritySortValue(achievement) {
   const percent = getAchievementPercent(achievement);
+  const rarity = getAchievementRarityLabel(achievement);
 
   if (percent !== null) return percent;
-  if (achievement?.rarity === "hard") return HARD_ACHIEVEMENT_PERCENT;
-  if (achievement?.rarity === "legendary") return STEAM_LEGENDARY_PERCENT;
-  if (achievement?.rarity === "rare") return 40;
+  if (rarity === "hard") return HARD_ACHIEVEMENT_PERCENT;
+  if (rarity === "legendary") return STEAM_LEGENDARY_PERCENT;
+  if (rarity === "rare") return 40;
 
   return 100;
 }
@@ -1911,7 +1918,7 @@ function renderAchievementHuntingPanel() {
     .slice(0, 3);
   const rareMissing = gamesWithAchievements
     .flatMap(game => getGameAchievements(game)
-      .filter(achievement => !achievement.unlocked && isSteamLegendaryAchievement(achievement))
+      .filter(achievement => !achievement.unlocked && isGameVaultRareAchievement(achievement))
       .map(achievement => ({ game, achievement })))
     .sort((a, b) => {
       const aHard = isHardAchievement(a.achievement) ? 0 : 1;
@@ -1920,11 +1927,13 @@ function renderAchievementHuntingPanel() {
       if (aHard !== bHard) return aHard - bHard;
       return getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement);
     })
-    .slice(0, 3);
+    .slice(0, 8);
   const rareUnlocked = gamesWithAchievements
-    .flatMap(game => getLegendaryAchievements(game).map(achievement => ({ game, achievement })))
+    .flatMap(game => getGameAchievements(game)
+      .filter(achievement => achievement.unlocked && isGameVaultRareAchievement(achievement))
+      .map(achievement => ({ game, achievement })))
     .sort((a, b) => getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement))
-    .slice(0, 3);
+    .slice(0, 8);
 
   return `
     <div class="hunting-panel">
