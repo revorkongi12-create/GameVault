@@ -39,10 +39,10 @@
 
   <div id="appShell" class="app hidden">
     <aside class="sidebar">
-      <div class="logo">
+      <button id="appInfoBtn" class="logo" type="button">
         <img src="../build/GameVault.ico" alt="GameVault" />
         <span>GameVault</span>
-      </div>
+      </button>
 
       <button id="homeBtn" class="nav-btn home">🏠 Home</button>
       <button id="libraryBtn" class="nav-btn library">📚 Library</button>
@@ -97,6 +97,11 @@
               <div class="stat-box">
                 <strong id="achievementScore">0</strong>
                 <small>Score</small>
+              </div>
+
+              <div class="stat-box">
+                <strong id="steamLevel">--</strong>
+                <small>Steam Level</small>
               </div>
             </div>
           </div>
@@ -289,7 +294,18 @@
 
         <div id="settingsPanel"></div>
       </section>
+
+      <section id="appInfoView" class="view hidden">
+        <div class="section-title">
+          <h1>GameVault</h1>
+          <p>How your vault, levels, trophies, and hunting tools work.</p>
+        </div>
+
+        <div id="appInfoPanel"></div>
+      </section>
     </main>
+
+    <div id="quickLaunchDock" class="quick-launch-dock"></div>
   </div>
 
   <div id="goalModal" class="modal hidden">

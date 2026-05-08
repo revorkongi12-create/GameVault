@@ -16,6 +16,8 @@ const shell = window.gameVault || {
 let API_BASE = shell.apiBase || "http://localhost:3000";
 const CLIENT_ID_STORAGE_KEY = "gameVaultClientId";
 const CLIENT_ID = localStorage.getItem(CLIENT_ID_STORAGE_KEY) || createClientId();
+let activeViewName = "home";
+let librarySyncInProgress = false;
 
 localStorage.setItem(CLIENT_ID_STORAGE_KEY, CLIENT_ID);
 
@@ -83,10 +85,18 @@ const state = {
   activeSession: null,
   sessionHistory: [],
   selectedTheme: "default",
+  selectedUiStyle: "vault",
+  selectedBadge: "none",
+  customDisplayName: "",
+  profileBio: "",
+  profileBackground: "",
+  steamExtras: null,
   steamProfile: null,
   steamLibrarySyncedAt: null,
   steamAchievementsSyncedAt: null,
   achievementSyncVersion: 0,
+  pinnedAchievementIds: [],
+  pinnedGameIds: [],
   keybinds: {}
 };
 
@@ -123,10 +133,18 @@ function loadState() {
     if (!("activeSession" in state)) state.activeSession = null;
     if (!state.sessionHistory) state.sessionHistory = [];
     if (!("selectedTheme" in state)) state.selectedTheme = "default";
+    if (!("selectedUiStyle" in state)) state.selectedUiStyle = "vault";
+    if (!("selectedBadge" in state)) state.selectedBadge = "none";
+    if (!("customDisplayName" in state)) state.customDisplayName = "";
+    if (!("profileBio" in state)) state.profileBio = "";
+    if (!("profileBackground" in state)) state.profileBackground = "";
+    if (!("steamExtras" in state)) state.steamExtras = null;
     if (!("steamProfile" in state)) state.steamProfile = null;
     if (!("steamLibrarySyncedAt" in state)) state.steamLibrarySyncedAt = null;
     if (!("steamAchievementsSyncedAt" in state)) state.steamAchievementsSyncedAt = null;
     if (!("achievementSyncVersion" in state)) state.achievementSyncVersion = 0;
+    if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
+    if (!Array.isArray(state.pinnedGameIds)) state.pinnedGameIds = [];
     if (!state.keybinds) state.keybinds = {};
     state.keybinds = normalizeKeybinds(state.keybinds);
 
@@ -163,10 +181,18 @@ function loadState() {
     state.activeSession = null;
     state.sessionHistory = [];
     state.selectedTheme = "default";
+    state.selectedUiStyle = "vault";
+    state.selectedBadge = "none";
+    state.customDisplayName = "";
+    state.profileBio = "";
+    state.profileBackground = "";
+    state.steamExtras = null;
     state.steamProfile = null;
     state.steamLibrarySyncedAt = null;
     state.steamAchievementsSyncedAt = null;
     state.achievementSyncVersion = 0;
+    state.pinnedAchievementIds = [];
+    state.pinnedGameIds = [];
     state.keybinds = normalizeKeybinds({});
 
     saveState();
@@ -177,11 +203,60 @@ function getCurrentGame() {
   return state.games.find(game => game.id === state.currentGameId);
 }
 
+function getGameId(game) {
+  return String(game?.appid || game?.id || "");
+}
+
+function isGamePinned(game) {
+  return state.pinnedGameIds.includes(getGameId(game));
+}
+
 function getRecentGame() {
-  return state.games.reduce((latest, game) => {
-    if (!latest || game.lastPlayed > latest.lastPlayed) return game;
-    return latest;
+  const currentSteamGame = state.steamProfile?.currentGameId
+    ? state.games.find(game => String(game.appid) === String(state.steamProfile.currentGameId))
+    : null;
+
+  if (currentSteamGame) return currentSteamGame;
+
+  const playedGames = state.games.filter(game => game.lastPlayed || game.recentHours);
+
+  return playedGames.reduce((latest, game) => {
+    if (!latest) return game;
+
+    const gamePlayedAt = game.lastPlayed || 0;
+    const latestPlayedAt = latest.lastPlayed || 0;
+
+    if (gamePlayedAt !== latestPlayedAt) {
+      return gamePlayedAt > latestPlayedAt ? game : latest;
+    }
+
+    return (game.recentHours || 0) > (latest.recentHours || 0) ? game : latest;
   }, null);
+}
+
+function getQuickLaunchGames() {
+  const pinnedGames = state.pinnedGameIds
+    .map(id => state.games.find(game => getGameId(game) === String(id)))
+    .filter(Boolean);
+  const recentGames = [...state.games]
+    .filter(game => game.lastPlayed || game.recentHours || String(game.appid) === String(state.steamProfile?.currentGameId))
+    .sort((a, b) => {
+      const aLive = String(a.appid) === String(state.steamProfile?.currentGameId) ? 1 : 0;
+      const bLive = String(b.appid) === String(state.steamProfile?.currentGameId) ? 1 : 0;
+
+      if (aLive !== bLive) return bLive - aLive;
+
+      return (b.lastPlayed || 0) - (a.lastPlayed || 0) || (b.recentHours || 0) - (a.recentHours || 0);
+    });
+  const games = [];
+
+  [...pinnedGames, ...recentGames].forEach(game => {
+    if (!games.some(item => getGameId(item) === getGameId(game))) {
+      games.push(game);
+    }
+  });
+
+  return games.slice(0, 6);
 }
 
 function getTotalHours() {
@@ -237,12 +312,28 @@ function getLevelTitle(level = getLevelData().level) {
 }
 
 const profileThemes = [
-  { id:"default", name:"Amber Vault", level:1 },
-  { id:"blue", name:"Vault Blue", level:5 },
-  { id:"green", name:"Vault Green", level:10 },
-  { id:"red", name:"Vault Red", level:20 },
-  { id:"purple", name:"Vault Purple", level:30 },
-  { id:"royal", name:"Royal Blue", level:40 }
+  { id:"default", name:"Amber Vault" },
+  { id:"blue", name:"Vault Blue" },
+  { id:"green", name:"Vault Green" },
+  { id:"red", name:"Vault Red" },
+  { id:"purple", name:"Vault Purple" },
+  { id:"royal", name:"Royal Blue" }
+];
+
+const profileBadges = [
+  { id:"none", name:"No Badge", level:1 },
+  { id:"scout", name:"Library Scout", level:5 },
+  { id:"chaser", name:"Achievement Chaser", level:10 },
+  { id:"curator", name:"Vault Curator", level:20 },
+  { id:"rare", name:"Rare Hunter", level:30 },
+  { id:"completionist", name:"Completionist", level:40 },
+  { id:"legend", name:"Vault Legend", level:50 }
+];
+
+const uiStyles = [
+  { id:"vault", name:"Vault Glass" },
+  { id:"compact", name:"Compact" },
+  { id:"contrast", name:"High Contrast" }
 ];
 
 const keybindDefaults = {
@@ -295,14 +386,28 @@ function normalizeThemeId(themeId) {
 }
 
 function getUnlockedThemes() {
+  return profileThemes;
+}
+
+function getUnlockedBadges() {
   const level = getLevelData().level;
 
-  return profileThemes.filter(theme => level >= theme.level);
+  return profileBadges.filter(badge => level >= badge.level);
+}
+
+function getSelectedBadge() {
+  return profileBadges.find(badge => badge.id === state.selectedBadge) || profileBadges[0];
 }
 
 function applySelectedTheme() {
   state.selectedTheme = normalizeThemeId(state.selectedTheme);
   document.body.dataset.theme = state.selectedTheme || "default";
+}
+
+function applySelectedUiStyle() {
+  document.body.dataset.uiStyle = uiStyles.some(style => style.id === state.selectedUiStyle)
+    ? state.selectedUiStyle
+    : "vault";
 }
 
 function getCompletedGames() {
@@ -359,6 +464,48 @@ function getAchievementHuntBadge(achievement) {
   if (!isGameVaultRareAchievement(achievement)) return "";
 
   return achievement.unlocked ? "Rare win" : "Rare target";
+}
+
+function getAchievementId(game, achievement) {
+  return `${game?.appid || game?.id || "game"}::${achievement?.apiname || achievement?.name || "achievement"}`;
+}
+
+function isAchievementPinned(game, achievement) {
+  return state.pinnedAchievementIds.includes(getAchievementId(game, achievement));
+}
+
+function getPinnedAchievementTargets() {
+  const pinnedIds = new Set(state.pinnedAchievementIds);
+
+  return state.games.flatMap(game => getGameAchievements(game)
+    .filter(achievement => pinnedIds.has(getAchievementId(game, achievement)))
+    .map(achievement => ({ game, achievement })));
+}
+
+function renderAchievementIcon(achievement) {
+  const icon = achievement?.unlocked
+    ? achievement.icon
+    : achievement?.iconGray || achievement?.icon;
+
+  return icon
+    ? `<img src="${escapeHtml(icon)}" alt="">`
+    : `<span>${achievement?.unlocked ? "Done" : "Lock"}</span>`;
+}
+
+function renderAchievementTargetButton(item, { pinned = false } = {}) {
+  const gameId = Number(item.game.id) || Number(item.game.appid) || 0;
+  const rarityClass = getAchievementRarityClass(item.achievement);
+
+  return `
+    <button class="hunting-target${rarityClass}${pinned ? " pinned-hunt-target" : ""}" onclick="openGame(${gameId})">
+      <span class="hunting-target-icon">${renderAchievementIcon(item.achievement)}</span>
+
+      <span>
+        ${escapeHtml(item.achievement.name || "Unnamed achievement")}
+        <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
+      </span>
+    </button>
+  `;
 }
 
 function formatAchievementPercent(achievement) {
@@ -1075,6 +1222,7 @@ async function refreshRecentActivityData() {
   state.achievementSyncVersion = ACHIEVEMENT_SYNC_SCHEMA_VERSION;
   saveState();
   refreshActivityPanels();
+  renderQuickLaunchDock();
 }
 
 async function syncSteamLibrary({ silent = false } = {}) {
@@ -1105,6 +1253,7 @@ async function syncSteamLibrary({ silent = false } = {}) {
 
     saveState();
     renderHome();
+    renderQuickLaunchDock();
     await publishGameVaultProfile();
 
     return true;
@@ -1130,7 +1279,9 @@ function getGameVaultPublicProfile() {
     gamesOwned:state.games.length,
     achievementsUnlocked:getUnlockedAchievements(),
     achievementsTotal:getTotalAchievements(),
-    theme:state.selectedTheme
+    theme:state.selectedTheme,
+    badge:getSelectedBadge().name,
+    displayName:state.customDisplayName || state.steamProfile?.username || ""
   };
 }
 
@@ -1150,6 +1301,21 @@ async function publishGameVaultProfile() {
   }
 }
 
+async function fetchSteamExtras() {
+  if (!state.steamProfile) return;
+
+  try {
+    const response = await fetch(getApiUrl("/api/steam/extras"));
+
+    if (!response.ok) return;
+
+    state.steamExtras = await response.json();
+    saveState();
+  } catch (error) {
+    console.error("Could not fetch Steam extras:", error);
+  }
+}
+
 const views = {
   home: document.getElementById("homeView"),
   library: document.getElementById("libraryView"),
@@ -1159,7 +1325,8 @@ const views = {
   trophies: document.getElementById("trophiesView"),
   friends: document.getElementById("friendsView"),
   stats: document.getElementById("statsView"),
-  settings: document.getElementById("settingsView")
+  settings: document.getElementById("settingsView"),
+  appInfo: document.getElementById("appInfoView")
 };
 
 function hideAllViews() {
@@ -1169,7 +1336,11 @@ function hideAllViews() {
 function showView(name) {
   const nextView = views[name];
 
-  if (!nextView || !nextView.classList.contains("hidden")) return;
+  if (!nextView) return;
+
+  activeViewName = name;
+
+  if (!nextView.classList.contains("hidden")) return;
 
   triggerViewTransition();
   hideAllViews();
@@ -1224,29 +1395,81 @@ function activateView(name) {
     settings() {
       renderSettings();
       showView("settings");
+    },
+    appInfo() {
+      renderAppInfo();
+      showView("appInfo");
     }
   };
 
   actions[name]?.();
 }
 
+function renderActiveView() {
+  const renderers = {
+    home: renderHome,
+    library: renderLibrary,
+    achievements: renderAchievements,
+    goals() {
+      populateGoalFilter();
+      renderGoals();
+    },
+    trophies() {
+      updateTrophyForm();
+      renderTrophies();
+    },
+    friends: renderFriends,
+    stats: renderInsights,
+    settings: renderSettings,
+    appInfo: renderAppInfo
+  };
+
+  renderers[activeViewName]?.();
+}
+
 function isTypingInField(target) {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName) || target?.isContentEditable;
 }
 
-function updateLoginGate() {
+function updateLoginGate({ redirectHome = false } = {}) {
   const loginView = document.getElementById("loginView");
   const appShell = document.getElementById("appShell");
 
   if (state.steamProfile) {
+    const wasHidden = appShell.classList.contains("hidden");
+
     loginView.classList.add("hidden");
     appShell.classList.remove("hidden");
-    renderHome();
-    showView("home");
+
+    if (redirectHome || wasHidden) {
+      renderHome();
+      showView("home");
+    } else {
+      renderActiveView();
+    }
+
+    renderQuickLaunchDock();
   } else {
     loginView.classList.remove("hidden");
     appShell.classList.add("hidden");
+    renderQuickLaunchDock();
   }
+}
+
+function queueSteamLibrarySync({ silent = true } = {}) {
+  if (librarySyncInProgress || !state.steamProfile) return;
+
+  librarySyncInProgress = true;
+
+  syncSteamLibrary({ silent })
+    .then(() => {
+      if (!views[activeViewName]?.classList.contains("hidden")) {
+        renderActiveView();
+      }
+    })
+    .finally(() => {
+      librarySyncInProgress = false;
+    });
 }
 
 async function refreshSteamProfile() {
@@ -1265,7 +1488,7 @@ async function refreshSteamProfile() {
         !state.steamAchievementsSyncedAt ||
         state.achievementSyncVersion !== ACHIEVEMENT_SYNC_SCHEMA_VERSION
       ) {
-        await syncSteamLibrary({ silent: true });
+        queueSteamLibrarySync({ silent: true });
       }
     } else {
       finishActiveSession();
@@ -1282,6 +1505,10 @@ async function refreshSteamProfile() {
     updateLoginGate();
 
     if (state.steamProfile) {
+      fetchSteamExtras().then(() => {
+        if (activeViewName === "home") renderHome();
+        if (activeViewName === "settings") renderSettings();
+      });
       await publishGameVaultProfile();
     }
 
@@ -1375,18 +1602,78 @@ function simulateLaunch(game) {
 
   saveState();
   renderHome();
+  renderQuickLaunchDock();
   launchSteamGame(game);
 }
+
+function renderQuickLaunchDock() {
+  const dock = document.getElementById("quickLaunchDock");
+
+  if (!dock) return;
+
+  const games = getQuickLaunchGames();
+
+  if (!state.steamProfile || !games.length) {
+    dock.innerHTML = "";
+    dock.classList.add("hidden");
+    return;
+  }
+
+  dock.classList.remove("hidden");
+  dock.innerHTML = `
+    <div class="quick-launch-label">Quick Launch</div>
+
+    <div class="quick-launch-games">
+      ${games.map(game => `
+        <button
+          class="quick-launch-item ${isGamePinned(game) ? "pinned" : ""}"
+          title="${escapeHtml(game.name)}"
+          onclick="quickLaunchGame('${escapeHtml(getGameId(game))}')"
+        >
+          ${getSafeImageMarkup(game)}
+          <span>${escapeHtml(game.name)}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function togglePinnedGame(game) {
+  const gameId = getGameId(game);
+
+  if (!gameId) return;
+
+  if (state.pinnedGameIds.includes(gameId)) {
+    state.pinnedGameIds = state.pinnedGameIds.filter(id => id !== gameId);
+  } else {
+    state.pinnedGameIds.push(gameId);
+  }
+
+  saveState();
+  renderQuickLaunchDock();
+  openGame(game.id);
+}
+
+window.quickLaunchGame = function(gameId) {
+  const game = state.games.find(item => getGameId(item) === String(gameId));
+
+  if (!game) return;
+
+  simulateLaunch(game);
+};
 
 function renderSettings() {
   const panel = document.getElementById("settingsPanel");
   const unlockedThemes = getUnlockedThemes();
+  const unlockedBadges = getUnlockedBadges();
 
   panel.innerHTML = `
     <div class="placeholder-card">
       <h1>Steam Account</h1>
       <p>${state.steamProfile ? `Connected as ${state.steamProfile.username}` : "Not connected"}</p>
       <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
+      <p>Steam level: ${state.steamExtras?.steamLevel || "not loaded yet"}</p>
+      <p>${state.steamExtras?.valueNote || "Steam value and inventory estimates are being prepared for the 1.1.0 pass."}</p>
 
       <button id="openSteamProfileBtn" class="primary-btn">
         Open Steam Profile
@@ -1402,14 +1689,39 @@ function renderSettings() {
     </div>
 
     <div class="placeholder-card settings-card">
+      <h1>Profile Editing</h1>
+
+      <label for="displayNameInput">Display Name</label>
+      <input id="displayNameInput" class="settings-input" type="text" value="${escapeHtml(state.customDisplayName)}" placeholder="Use Steam name" />
+
+      <label for="profileBioInput">Profile Bio</label>
+      <input id="profileBioInput" class="settings-input" type="text" value="${escapeHtml(state.profileBio)}" placeholder="Short profile line..." />
+
+      <label for="profileBackgroundInput">Profile Background URL</label>
+      <input id="profileBackgroundInput" class="settings-input" type="url" value="${escapeHtml(state.profileBackground)}" placeholder="https://..." />
+    </div>
+
+    <div class="placeholder-card settings-card">
       <h1>Profile Theme</h1>
-      <p>Unlocked themes come from your GameVault level.</p>
+      <p>Colors are free to choose. Level rewards now unlock badges instead.</p>
 
       <select id="themeSelect" class="settings-select">
-        ${profileThemes.map(theme => {
-          const unlocked = unlockedThemes.some(item => item.id === theme.id);
+        ${unlockedThemes.map(theme => {
+          return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""}>${theme.name}</option>`;
+        }).join("")}
+      </select>
 
-          return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${theme.name}${unlocked ? "" : ` - Lvl ${theme.level}`}</option>`;
+      <label for="uiStyleSelect">UI Style</label>
+      <select id="uiStyleSelect" class="settings-select">
+        ${uiStyles.map(style => `<option value="${style.id}" ${state.selectedUiStyle === style.id ? "selected" : ""}>${style.name}</option>`).join("")}
+      </select>
+
+      <label for="badgeSelect">Display Badge</label>
+      <select id="badgeSelect" class="settings-select">
+        ${profileBadges.map(badge => {
+          const unlocked = unlockedBadges.some(item => item.id === badge.id);
+
+          return `<option value="${badge.id}" ${state.selectedBadge === badge.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${badge.name}${unlocked ? "" : ` - Lvl ${badge.level}`}</option>`;
         }).join("")}
       </select>
     </div>
@@ -1454,6 +1766,30 @@ function renderSettings() {
     publishGameVaultProfile();
   };
 
+  document.getElementById("uiStyleSelect").onchange = event => {
+    state.selectedUiStyle = event.target.value;
+    saveState();
+    applySelectedUiStyle();
+  };
+
+  document.getElementById("badgeSelect").onchange = event => {
+    state.selectedBadge = event.target.value;
+    saveState();
+    renderHome();
+    publishGameVaultProfile();
+  };
+
+  ["displayNameInput", "profileBioInput", "profileBackgroundInput"].forEach(id => {
+    document.getElementById(id).oninput = event => {
+      if (id === "displayNameInput") state.customDisplayName = event.target.value.trim();
+      if (id === "profileBioInput") state.profileBio = event.target.value.trim();
+      if (id === "profileBackgroundInput") state.profileBackground = event.target.value.trim();
+
+      saveState();
+      renderHome();
+    };
+  });
+
   document.querySelectorAll(".keybind-input").forEach(input => {
     input.onfocus = () => {
       input.value = "Press a key...";
@@ -1491,20 +1827,99 @@ function renderSettings() {
   };
 }
 
+function renderAppInfo() {
+  const panel = document.getElementById("appInfoPanel");
+
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="app-info-grid">
+      <section class="app-info-card">
+        <h2>Leveling</h2>
+        <p>GameVault levels come from achievement XP. Each unlocked achievement adds score, and every level needs more XP than the last.</p>
+        <strong>Your current title: ${escapeHtml(getLevelTitle(getLevelData().level))}</strong>
+      </section>
+
+      <section class="app-info-card">
+        <h2>Achievement Hunting</h2>
+        <p>Pin locked achievements from the Achievements tab to keep them in your hunting list. Rare and hard achievements use Steam global unlock percentages when Steam provides them.</p>
+      </section>
+
+      <section class="app-info-card">
+        <h2>Trophies</h2>
+        <p>Your showcase can hold up to ${MAX_SHOWCASE_TROPHIES} trophies. Completion trophies are limited to ${MAX_COMPLETED_TROPHIES}, so profiles stay varied.</p>
+      </section>
+
+      <section class="app-info-card">
+        <h2>Quick Launch</h2>
+        <p>The bottom dock shows pinned games and recent games. Pressing a dock game launches it through Steam directly.</p>
+      </section>
+
+      <section class="app-info-card top-profiles-card">
+        <h2>Top Vaults</h2>
+        <div id="topProfilesList">
+          <p>Loading saved GameVault profiles...</p>
+        </div>
+      </section>
+    </div>
+  `;
+
+  loadTopGameVaultProfiles();
+}
+
+async function loadTopGameVaultProfiles() {
+  const list = document.getElementById("topProfilesList");
+
+  if (!list) return;
+
+  try {
+    const response = await fetch(getApiUrl("/api/gamevault/top-profiles"));
+
+    if (!response.ok) throw new Error(`Top profiles failed with status ${response.status}`);
+
+    const data = await response.json();
+    const profiles = data.profiles || [];
+
+    list.innerHTML = profiles.length
+      ? profiles.map((profile, index) => `
+        <div class="top-profile-row">
+          <span>${index + 1}</span>
+          <img src="${escapeHtml(profile.avatar || "")}" alt="">
+          <strong>${escapeHtml(profile.displayName || profile.username || "Player")}</strong>
+          <small>Lvl ${Number(profile.level) || 1}${profile.badge ? ` - ${escapeHtml(profile.badge)}` : ""}</small>
+        </div>
+      `).join("")
+      : `<p>No public GameVault profiles saved yet.</p>`;
+  } catch (error) {
+    console.error(error);
+    list.innerHTML = `<p>Could not load top profiles right now.</p>`;
+  }
+}
+
 function renderProfile() {
   const levelData = getLevelData();
+  const selectedBadge = getSelectedBadge();
 
   const profileName = document.getElementById("profileName");
   const profileTagline = document.getElementById("profileTagline");
   const avatarImg = document.getElementById("avatarImg");
+  const profileBg = document.querySelector(".profile-bg");
+  const displayName = state.customDisplayName || state.steamProfile?.username || "Player";
+  const tagline = state.profileBio || getLevelTitle(levelData.level);
+
+  if (profileBg) {
+    profileBg.style.backgroundImage = state.profileBackground
+      ? `linear-gradient(to right, rgba(0,0,0,.72), rgba(0,0,0,.18)), url("${state.profileBackground.replace(/"/g, "%22")}")`
+      : "";
+  }
 
   if (state.steamProfile) {
-    profileName.textContent = state.steamProfile.username;
-    profileTagline.textContent = getLevelTitle(levelData.level);
+    profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
+    profileTagline.textContent = tagline;
     avatarImg.src = state.steamProfile.avatar;
   } else {
-    profileName.textContent = "Player";
-    profileTagline.textContent = getLevelTitle(levelData.level);
+    profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
+    profileTagline.textContent = tagline;
     avatarImg.src = "https://via.placeholder.com/100";
   }
 
@@ -1512,6 +1927,7 @@ function renderProfile() {
   document.getElementById("gamesOwned").textContent = state.games.length;
   document.getElementById("userLevel").textContent = `Lvl ${levelData.level}`;
   document.getElementById("achievementScore").textContent = getAchievementScore();
+  document.getElementById("steamLevel").textContent = state.steamExtras?.steamLevel || "--";
   document.getElementById("xpFill").style.width = `${levelData.percent}%`;
   document.getElementById("xpText").textContent = `${levelData.current}/${levelData.needed} XP to Level ${levelData.level + 1}`;
 }
@@ -1720,6 +2136,10 @@ function openGame(gameId) {
                Play
             </button>
 
+            <button class="pin-game-btn ${isGamePinned(game) ? "active" : ""}" id="detailPinGameBtn">
+              ${isGamePinned(game) ? "Pinned" : "Pin to Dock"}
+            </button>
+
             <select id="detailBacklogSelect" class="backlog-select">
               <option value="">No Backlog Status</option>
               <option value="want">Want to Play</option>
@@ -1747,6 +2167,7 @@ function openGame(gameId) {
   `;
 
   document.getElementById("detailPlayBtn").onclick = () => simulateLaunch(game);
+  document.getElementById("detailPinGameBtn").onclick = () => togglePinnedGame(game);
   document.getElementById("detailBacklogSelect").value = game.backlogStatus || "";
   document.getElementById("detailBacklogSelect").onchange = event => {
     game.backlogStatus = event.target.value || null;
@@ -1769,7 +2190,23 @@ function renderGameDropdowns() {
     game.achievements.length
       ? game.achievements
         .filter(achievement => !achievement.unlocked)
-        .map(achievement => `<div class="list-item">Locked - ${achievement.name}</div>`)
+        .sort((a, b) => {
+          const aPinned = isAchievementPinned(game, a);
+          const bPinned = isAchievementPinned(game, b);
+
+          if (aPinned !== bPinned) return Number(bPinned) - Number(aPinned);
+
+          return getAchievementRaritySortValue(a) - getAchievementRaritySortValue(b);
+        })
+        .map(achievement => `
+          <div class="list-item achievement-mini-row${getAchievementRarityClass(achievement)}${isAchievementPinned(game, achievement) ? " pinned-achievement" : ""}">
+            <span class="achievement-icon">${renderAchievementIcon(achievement)}</span>
+            <span>
+              <strong>${escapeHtml(achievement.name)}</strong>
+              <small>${isAchievementPinned(game, achievement) ? "Pinned hunt - " : ""}${formatAchievementPercent(achievement)}</small>
+            </span>
+          </div>
+        `)
         .join("") || `<div class="list-item">All tracked achievements completed.</div>`
       : `<div class="list-item">Achievement sync is not available for this game yet.</div>`;
 
@@ -1976,9 +2413,6 @@ function renderAchievements() {
 
     const achievementRows = total
       ? sortedAchievements.map(achievement => {
-        const icon = achievement.unlocked
-          ? achievement.icon
-          : achievement.iconGray || achievement.icon;
         const globalPercent = typeof achievement.globalPercent === "number"
           ? ` - ${achievement.globalPercent.toFixed(1)}% global`
           : "";
@@ -1986,22 +2420,31 @@ function renderAchievements() {
         const description = achievement.description ||
           `${rarityLabel} achievement${globalPercent}`;
         const huntBadge = getAchievementHuntBadge(achievement);
+        const pinned = isAchievementPinned(game, achievement);
 
         return `
-          <div class="achievement-item ${achievement.unlocked ? "unlocked" : "locked"}${getAchievementRarityClass(achievement)}">
+          <div class="achievement-item ${achievement.unlocked ? "unlocked" : "locked"}${getAchievementRarityClass(achievement)}${pinned ? " pinned-achievement" : ""}">
             <div class="achievement-icon">
-              ${icon ? `<img src="${escapeHtml(icon)}" alt="">` : achievement.unlocked ? "Done" : "Lock"}
+              ${renderAchievementIcon(achievement)}
             </div>
 
             <div>
               <strong>${escapeHtml(achievement.name || "Unnamed achievement")}</strong>
               <p>${escapeHtml(description)}</p>
-              ${huntBadge ? `<small class="achievement-hunt-badge">${huntBadge} - ${formatAchievementPercent(achievement)}</small>` : ""}
+              ${huntBadge || pinned ? `<small class="achievement-hunt-badge">${pinned ? "Pinned hunt" : huntBadge} - ${formatAchievementPercent(achievement)}</small>` : ""}
             </div>
 
-            <span class="achievement-status">
-              ${achievement.unlocked ? "Unlocked" : "Locked"}
-            </span>
+            <div class="achievement-actions">
+              <span class="achievement-status">
+                ${achievement.unlocked ? "Unlocked" : "Locked"}
+              </span>
+
+              ${achievement.unlocked ? "" : `
+                <button class="achievement-pin-btn ${pinned ? "active" : ""}" onclick="toggleAchievementHunt('${escapeHtml(getAchievementId(game, achievement))}')">
+                  ${pinned ? "Pinned" : "Pin"}
+                </button>
+              `}
+            </div>
           </div>
         `;
       }).join("")
@@ -2048,6 +2491,11 @@ function renderAchievements() {
 
 function renderAchievementHuntingPanel() {
   const gamesWithAchievements = state.games.filter(game => getGameAchievements(game).length);
+  const pinnedTargets = getPinnedAchievementTargets()
+    .sort((a, b) => {
+      if (a.achievement.unlocked !== b.achievement.unlocked) return Number(a.achievement.unlocked) - Number(b.achievement.unlocked);
+      return getAchievementRaritySortValue(a.achievement) - getAchievementRaritySortValue(b.achievement);
+    });
   const missingAchievementPool = gamesWithAchievements
     .flatMap(game => getGameAchievements(game)
       .filter(achievement => !achievement.unlocked)
@@ -2096,6 +2544,15 @@ function renderAchievementHuntingPanel() {
         <p>Fast targets, rare misses, and rare wins.</p>
       </div>
 
+      <div class="pinned-hunts">
+        <strong>Pinned Hunts</strong>
+        ${
+          pinnedTargets.length
+            ? pinnedTargets.map(item => renderAchievementTargetButton(item, { pinned:true })).join("")
+            : `<p>Pin locked achievements from any game list to keep them here.</p>`
+        }
+      </div>
+
       <div class="hunting-grid">
         <div class="hunting-card">
           <strong>Closest to 100%</strong>
@@ -2110,17 +2567,11 @@ function renderAchievementHuntingPanel() {
         <div class="hunting-card">
           <strong>Rarest Missing</strong>
           ${rareMissing.length ? rareMissing.map(item => `
-            <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
-              ${escapeHtml(item.achievement.name || "Unnamed achievement")}
-              <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
-            </button>
+            ${renderAchievementTargetButton(item)}
           `).join("") : fallbackMissing.length ? `
             <p>Steam did not return rare missing data yet, so these are your next missing targets.</p>
             ${fallbackMissing.map(item => `
-              <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
-                ${escapeHtml(item.achievement.name || "Unnamed achievement")}
-                <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
-              </button>
+              ${renderAchievementTargetButton(item)}
             `).join("")}
           ` : `<p>No missing achievements found.</p>`}
         </div>
@@ -2128,17 +2579,11 @@ function renderAchievementHuntingPanel() {
         <div class="hunting-card">
           <strong>Rare Wins</strong>
           ${rareUnlocked.length ? rareUnlocked.map(item => `
-            <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
-              ${escapeHtml(item.achievement.name || "Unnamed achievement")}
-              <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
-            </button>
+            ${renderAchievementTargetButton(item)}
           `).join("") : fallbackUnlocked.length ? `
             <p>Steam did not return rare win data yet, so these are your latest unlocked targets.</p>
             ${fallbackUnlocked.map(item => `
-              <button onclick="openGame(${Number(item.game.id) || Number(item.game.appid) || 0})">
-                ${escapeHtml(item.achievement.name || "Unnamed achievement")}
-                <small>${escapeHtml(item.game.name || "Unknown game")} - ${formatAchievementPercent(item.achievement)}</small>
-              </button>
+              ${renderAchievementTargetButton(item)}
             `).join("")}
           ` : `<p>No unlocked achievements yet.</p>`}
         </div>
@@ -2153,6 +2598,17 @@ function renderAchievementHuntingPanel() {
 
   list.classList.toggle("hidden");
   toggle?.classList.toggle("open", !list.classList.contains("hidden"));
+};
+
+window.toggleAchievementHunt = function(achievementId) {
+  if (state.pinnedAchievementIds.includes(achievementId)) {
+    state.pinnedAchievementIds = state.pinnedAchievementIds.filter(id => id !== achievementId);
+  } else {
+    state.pinnedAchievementIds.push(achievementId);
+  }
+
+  saveState();
+  renderAchievements();
 };
 
 async function fetchSteamFriends() {
@@ -3523,6 +3979,10 @@ document.getElementById("settingsBtn").onclick = () => {
   activateView("settings");
 };
 
+document.getElementById("appInfoBtn").onclick = () => {
+  activateView("appInfo");
+};
+
 document.querySelectorAll(".dropdown-header")
   .forEach(btn => {
     btn.onclick = () => {
@@ -3597,6 +4057,7 @@ async function initializeApp() {
   loadState();
 
   applySelectedTheme();
+  applySelectedUiStyle();
 
   refreshSteamProfile();
 

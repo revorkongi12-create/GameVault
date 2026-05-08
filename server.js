@@ -350,11 +350,24 @@ app.post("/api/gamevault/profile", (req, res) => {
     achievementsUnlocked:Math.max(0, Math.floor(Number(req.body?.achievementsUnlocked) || 0)),
     achievementsTotal:Math.max(0, Math.floor(Number(req.body?.achievementsTotal) || 0)),
     theme:String(req.body?.theme || "default"),
+    badge:String(req.body?.badge || ""),
+    displayName:String(req.body?.displayName || steamProfile.username),
     updatedAt:Date.now()
   });
   saveGameVaultProfiles();
 
   res.json({ success:true });
+});
+
+app.get("/api/gamevault/top-profiles", (req, res) => {
+  const profiles = [...gameVaultProfiles.values()]
+    .sort((a, b) => {
+      if ((b.level || 0) !== (a.level || 0)) return (b.level || 0) - (a.level || 0);
+      return (b.xp || 0) - (a.xp || 0);
+    })
+    .slice(0, 3);
+
+  res.json({ profiles });
 });
 
 app.get("/api/steam/owned-games", async (req, res) => {
@@ -405,6 +418,35 @@ app.get("/api/steam/recently-played", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error:"Failed to fetch recently played Steam games.",
+      details:error.message
+    });
+  }
+});
+
+app.get("/api/steam/extras", async (req, res) => {
+  const steamProfile = getSteamProfile(req);
+
+  if (!steamProfile) {
+    return res.status(401).json({ error:"No Steam account connected." });
+  }
+
+  try {
+    const levelResponse = await axios.get("https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/", {
+      params:{
+        key:STEAM_API_KEY,
+        steamid:steamProfile.steamid
+      }
+    });
+
+    res.json({
+      steamLevel:levelResponse.data.response?.player_level || 0,
+      libraryValue:null,
+      inventoryValue:null,
+      valueNote:"Library and inventory values need market pricing data and will be estimated in a later 1.1 pass."
+    });
+  } catch (error) {
+    res.status(500).json({
+      error:"Could not fetch Steam extras.",
       details:error.message
     });
   }

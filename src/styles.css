@@ -94,6 +94,59 @@ body{
   color:var(--text);
 }
 
+body[data-ui-style="compact"] .main{
+  padding:16px;
+  padding-bottom:108px;
+}
+
+body[data-ui-style="compact"] .home-panel,
+body[data-ui-style="compact"] .placeholder-card,
+body[data-ui-style="compact"] .friend-profile-card,
+body[data-ui-style="compact"] .hunting-panel{
+  border-radius:10px;
+  padding:14px;
+}
+
+body[data-ui-style="compact"] .section-title{
+  margin-bottom:14px;
+}
+
+body[data-ui-style="contrast"]{
+  --panel:#09090d;
+  --panel2:#111119;
+  --text:#ffffff;
+  --muted:#d8d8e4;
+}
+
+body[data-ui-style="contrast"] .home-panel,
+body[data-ui-style="contrast"] .placeholder-card,
+body[data-ui-style="contrast"] .friend-profile-card,
+body[data-ui-style="contrast"] .achievement-dropdown,
+body[data-ui-style="contrast"] .hunting-panel{
+  border-color:color-mix(in srgb, var(--accent) 44%, rgba(255,255,255,.18));
+}
+
+button,
+.game-card,
+.trophy-card,
+.achievement-game-toggle,
+.friend-row,
+.friend-game-card,
+.insight-toggle{
+  will-change:transform,filter;
+}
+
+button:active,
+.game-card:active,
+.trophy-card:active,
+.achievement-game-toggle:active,
+.friend-row:active,
+.friend-game-card:active,
+.insight-toggle:active{
+  transform:scale(.985);
+  filter:brightness(1.08);
+}
+
 .hidden{
   display:none !important;
 }
@@ -124,11 +177,17 @@ body{
   display:flex;
   align-items:center;
   gap:10px;
+  width:100%;
+  padding:0;
+  border:none;
+  background:transparent;
   font-size:26px;
   font-weight:700;
   margin-bottom:20px;
   color:var(--accent);
   text-shadow:0 0 18px var(--theme-glow);
+  cursor:pointer;
+  text-align:left;
 }
 
 .logo img{
@@ -174,6 +233,7 @@ body{
   position:relative;
   flex:1;
   padding:24px;
+  padding-bottom:124px;
   overflow:auto;
   background:linear-gradient(135deg,rgba(255,255,255,.015),rgba(0,0,0,.08));
 }
@@ -285,6 +345,8 @@ body{
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 45%, transparent), transparent 30%),
     linear-gradient(135deg,#1e2a44,#24113f,#0f1018);
+  background-size:cover;
+  background-position:center;
   filter:brightness(.9);
 }
 
@@ -309,6 +371,19 @@ body{
 .profile-identity h1{
   margin:0;
   font-size:34px;
+}
+
+.profile-badge{
+  display:inline-flex;
+  vertical-align:middle;
+  margin-left:8px;
+  padding:5px 9px;
+  border-radius:999px;
+  color:#101015;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  font-size:12px;
+  font-weight:900;
+  box-shadow:0 0 16px var(--theme-glow);
 }
 
 .profile-identity p{
@@ -502,6 +577,92 @@ body{
   filter:brightness(1.1);
 }
 
+.pin-game-btn{
+  margin-left:10px;
+  border:1px solid color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,.16));
+  border-radius:12px;
+  padding:12px 16px;
+  color:white;
+  background:rgba(255,255,255,.08);
+  cursor:pointer;
+  font-weight:800;
+  transition:.2s;
+}
+
+.pin-game-btn.active{
+  color:#101015;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  box-shadow:0 0 16px var(--theme-glow);
+}
+
+.quick-launch-dock{
+  position:fixed;
+  left:260px;
+  right:24px;
+  bottom:18px;
+  z-index:40;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 12px;
+  border-radius:18px;
+  background:color-mix(in srgb, var(--panel) 84%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 24%, rgba(255,255,255,.08));
+  box-shadow:0 18px 44px rgba(0,0,0,.4);
+  backdrop-filter:blur(18px);
+}
+
+.quick-launch-label{
+  flex:0 0 auto;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:800;
+  text-transform:uppercase;
+}
+
+.quick-launch-games{
+  min-width:0;
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+}
+
+.quick-launch-item{
+  flex:0 0 156px;
+  display:grid;
+  grid-template-columns:58px minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  padding:7px;
+  border:none;
+  border-radius:12px;
+  color:white;
+  background:rgba(255,255,255,.07);
+  cursor:pointer;
+  text-align:left;
+}
+
+.quick-launch-item.pinned{
+  outline:1px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  background:color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.07));
+}
+
+.quick-launch-item img{
+  width:58px;
+  height:34px;
+  border-radius:8px;
+  object-fit:cover;
+}
+
+.quick-launch-item span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:12px;
+  font-weight:800;
+}
+
 .hero-stats{
   display:flex;
   gap:10px;
@@ -529,9 +690,10 @@ body{
 
 .library-filter,
 .backlog-select,
-.settings-select{
+.settings-select,
+.settings-input{
   width:100%;
-  max-width:260px;
+  max-width:420px;
   margin:0 0 18px 10px;
   padding:13px 14px;
   border:none;
@@ -540,6 +702,13 @@ body{
   background:#1c1c2b;
   color:white;
   font-size:15px;
+}
+
+.settings-card label{
+  display:block;
+  margin:12px 0 7px 10px;
+  color:var(--muted);
+  font-weight:800;
 }
 
 .backlog-select{
@@ -1194,15 +1363,27 @@ body{
 }
 
 .achievement-item.rare-achievement{
-  border-color:color-mix(in srgb, var(--accent) 42%, rgba(255,255,255,.08));
+  border-color:color-mix(in srgb, var(--accent) 78%, rgba(255,255,255,.16));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.05)), rgba(255,255,255,.04));
-  box-shadow:0 0 18px var(--theme-glow);
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 28%, rgba(255,255,255,.06)), rgba(255,255,255,.05));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--accent) 36%, transparent);
 }
 
 .achievement-item.legendary-achievement,
 .achievement-item.hard-achievement{
-  border-color:color-mix(in srgb, var(--accent2) 56%, rgba(255,255,255,.12));
+  border-color:color-mix(in srgb, var(--accent2) 86%, rgba(255,255,255,.2));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 34%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent2) 42%, transparent);
+}
+
+.achievement-item.pinned-achievement{
+  border-style:solid;
+  border-width:1px;
+  outline:1px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset:2px;
 }
 
 .achievement-item p{
@@ -1231,6 +1412,12 @@ body{
   align-items:center;
   justify-content:center;
   background:rgba(255,255,255,.08);
+}
+
+.achievement-icon span{
+  font-size:11px;
+  font-weight:800;
+  color:var(--muted);
 }
 
 .achievement-complete{
@@ -1340,6 +1527,22 @@ body{
   gap:12px;
 }
 
+.pinned-hunts{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin:0 0 14px;
+  padding:14px;
+  border-radius:12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, rgba(255,255,255,.05)), rgba(255,255,255,.04));
+  border:1px solid color-mix(in srgb, var(--accent) 45%, rgba(255,255,255,.08));
+}
+
+.pinned-hunts > strong{
+  color:#fff0d6;
+}
+
 .hunting-card{
   padding:14px;
   border-radius:12px;
@@ -1352,9 +1555,12 @@ body{
   color:#ffd19d;
 }
 
-.hunting-card button{
+.hunting-card button,
+.pinned-hunts button{
   width:100%;
-  display:block;
+  display:flex;
+  align-items:center;
+  gap:10px;
   margin-bottom:8px;
   padding:10px;
   border:none;
@@ -1365,15 +1571,49 @@ body{
   background:rgba(255,255,255,.07);
 }
 
-.hunting-card button:hover{
+.hunting-card button:hover,
+.pinned-hunts button:hover{
   background:rgba(255,255,255,.12);
 }
 
 .hunting-card small,
-.hunting-card p{
+.hunting-card p,
+.pinned-hunts small,
+.pinned-hunts p{
   display:block;
   color:var(--muted);
   margin:4px 0 0;
+}
+
+.hunting-target-icon{
+  flex:0 0 34px;
+  width:34px;
+  height:34px;
+  border-radius:9px;
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,.08);
+  color:var(--muted);
+  font-size:10px;
+  font-weight:800;
+}
+
+.hunting-target-icon img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.hunting-target.rare-achievement{
+  border:1px solid color-mix(in srgb, var(--accent) 62%, rgba(255,255,255,.08));
+}
+
+.hunting-target.legendary-achievement,
+.hunting-target.hard-achievement{
+  border:1px solid color-mix(in srgb, var(--accent2) 78%, rgba(255,255,255,.12));
+  box-shadow:0 0 18px color-mix(in srgb, var(--accent2) 30%, transparent);
 }
 
 .achievement-chevron{
@@ -1398,20 +1638,122 @@ body{
   border-radius:8px;
 }
 
+.achievement-mini-row{
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+}
+
+.achievement-mini-row strong,
+.achievement-mini-row small{
+  display:block;
+}
+
+.achievement-mini-row small{
+  color:var(--muted);
+  margin-top:3px;
+}
+
 .achievement-item.unlocked{
   background:rgba(255,138,42,.08);
 }
 
-.achievement-status{
+.achievement-actions{
   margin-left:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:8px;
+}
+
+.achievement-status{
   color:var(--muted);
   font-size:12px;
+}
+
+.achievement-pin-btn{
+  border:none;
+  border-radius:999px;
+  padding:6px 10px;
+  color:#101015;
+  background:var(--accent);
+  cursor:pointer;
+  font-size:12px;
+  font-weight:800;
+}
+
+.achievement-pin-btn.active{
+  color:white;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  box-shadow:0 0 14px var(--theme-glow);
 }
 
 .placeholder-card{
   background:var(--panel);
   border-radius:16px;
   padding:30px;
+}
+
+.app-info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+
+.app-info-card{
+  padding:20px;
+  border-radius:16px;
+  background:var(--panel);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:0 14px 34px rgba(0,0,0,.22);
+}
+
+.app-info-card h2{
+  margin:0 0 10px;
+  color:#ffd19d;
+}
+
+.app-info-card p{
+  color:var(--muted);
+  line-height:1.55;
+}
+
+.app-info-card strong{
+  color:var(--accent);
+}
+
+.top-profiles-card{
+  grid-column:1 / -1;
+}
+
+.top-profile-row{
+  display:grid;
+  grid-template-columns:28px 46px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:10px;
+  border-radius:12px;
+  background:rgba(255,255,255,.05);
+  margin-top:8px;
+}
+
+.top-profile-row img{
+  width:46px;
+  height:46px;
+  border-radius:12px;
+  object-fit:cover;
+}
+
+.top-profile-row strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.top-profile-row small{
+  color:var(--muted);
 }
 
 .friends-layout{
