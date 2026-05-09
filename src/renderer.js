@@ -110,6 +110,10 @@ const state = {
   achievementSyncVersion: 0,
   pinnedAchievementIds: [],
   pinnedGameIds: [],
+  huntingExpanded: {
+    rareMissing:false,
+    rareWins:false
+  },
   keybinds: {}
 };
 
@@ -139,7 +143,8 @@ const profileScopedStateKeys = [
   "steamAchievementsSyncedAt",
   "achievementSyncVersion",
   "pinnedAchievementIds",
-  "pinnedGameIds"
+  "pinnedGameIds",
+  "huntingExpanded"
 ];
 
 function saveState() {
@@ -188,7 +193,11 @@ function getDefaultProfileScopedState() {
     steamAchievementsSyncedAt: null,
     achievementSyncVersion: 0,
     pinnedAchievementIds: [],
-    pinnedGameIds: []
+    pinnedGameIds: [],
+    huntingExpanded: {
+      rareMissing:false,
+      rareWins:false
+    }
   };
 }
 
@@ -233,6 +242,7 @@ function normalizeProfileScopedState() {
   if (!Array.isArray(state.sessionHistory)) state.sessionHistory = [];
   if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
   if (!Array.isArray(state.pinnedGameIds)) state.pinnedGameIds = [];
+  if (!state.huntingExpanded) state.huntingExpanded = { rareMissing:false, rareWins:false };
   if (!state.visibleFriendsCount) state.visibleFriendsCount = 8;
 }
 
@@ -320,6 +330,7 @@ function loadState() {
     if (!("achievementSyncVersion" in state)) state.achievementSyncVersion = 0;
     if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
     if (!Array.isArray(state.pinnedGameIds)) state.pinnedGameIds = [];
+    if (!state.huntingExpanded) state.huntingExpanded = { rareMissing:false, rareWins:false };
     if (!state.keybinds) state.keybinds = {};
     state.keybinds = normalizeKeybinds(state.keybinds);
 
@@ -379,6 +390,10 @@ function loadState() {
     state.achievementSyncVersion = 0;
     state.pinnedAchievementIds = [];
     state.pinnedGameIds = [];
+    state.huntingExpanded = {
+      rareMissing:false,
+      rareWins:false
+    };
     state.keybinds = normalizeKeybinds({});
 
     saveState();
@@ -438,6 +453,18 @@ function getQuickLaunchGames() {
 
 function getTotalHours() {
   return state.games.reduce((sum, game) => sum + game.hours, 0);
+}
+
+function getPlaytimeMilestoneData() {
+  const totalHours = getTotalHours();
+  const unlocked = playtimeMilestones.filter(milestone => totalHours >= milestone.hours);
+  const next = playtimeMilestones.find(milestone => totalHours < milestone.hours) || null;
+
+  return {
+    totalHours,
+    unlocked,
+    next
+  };
 }
 
 function getUnlockedAchievements() {
@@ -544,6 +571,15 @@ const profileStatLabels = {
   steamLevel:"Steam Level",
   libraryValue:"Library Value"
 };
+
+const playtimeMilestones = [
+  { hours:10, title:"Settled In", description:"10 total hours played" },
+  { hours:50, title:"Weekend Warrior", description:"50 total hours played" },
+  { hours:100, title:"Centurion", description:"100 total hours played" },
+  { hours:250, title:"Vault Regular", description:"250 total hours played" },
+  { hours:500, title:"Half-Thousand Hero", description:"500 total hours played" },
+  { hours:1000, title:"Timekeeper", description:"1,000 total hours played" }
+];
 
 const keybindDefaults = {
   toggleFullscreen:"F11",
@@ -734,6 +770,27 @@ function renderAchievementTargetButton(item, { pinned = false } = {}) {
   `;
 }
 
+function renderExpandableHuntingCard({ title, panelKey, items, fallbackItems, emptyText, fallbackText }) {
+  const sourceItems = items.length ? items : fallbackItems;
+  const expanded = Boolean(state.huntingExpanded?.[panelKey]);
+  const visibleItems = sourceItems.slice(0, expanded ? 9 : 4);
+
+  return `
+    <div class="hunting-card">
+      <div class="hunting-card-header">
+        <strong>${title}</strong>
+        ${sourceItems.length > 4 ? `<button class="hunting-expand-btn" onclick="toggleHuntingPanel('${panelKey}')">${expanded ? "Show less" : "Show more"}</button>` : ""}
+      </div>
+      ${!items.length && fallbackItems.length ? `<p>${fallbackText}</p>` : ""}
+      ${
+        visibleItems.length
+          ? visibleItems.map(item => renderAchievementTargetButton(item)).join("")
+          : `<p>${emptyText}</p>`
+      }
+    </div>
+  `;
+}
+
 function formatAchievementPercent(achievement) {
   const percent = getAchievementPercent(achievement);
 
@@ -791,6 +848,14 @@ function addActivity(type, icon, text, time = "Just now") {
 
 function getActivityIcon(item) {
   return ACTIVITY_ICONS[item.type] || ACTIVITY_ICONS[String(item.icon || "").toLowerCase()] || ACTIVITY_ICONS.new;
+}
+
+function renderActivityIconMarkup(item) {
+  if (item.achievementIcon) {
+    return `<span class="activity-icon achievement-activity-icon"><img src="${escapeHtml(item.achievementIcon)}" alt=""></span>`;
+  }
+
+  return `<span class="activity-icon">${getActivityIcon(item)}</span>`;
 }
 
 function getRarestUnlockedAchievement() {
@@ -899,6 +964,7 @@ function getRecentAchievementActivities() {
       .map(achievement => ({
         type:"achievement",
         icon:"Trophy",
+        achievementIcon:achievement.icon || achievement.iconGray || "",
         text:`Unlocked ${achievement.name} in ${game.name}`,
         time:new Date(achievement.unlockTime * 1000).toLocaleDateString(),
         sortTime:achievement.unlockTime * 1000
@@ -1506,6 +1572,7 @@ function getGameVaultPublicProfile() {
     achievementsUnlocked:getUnlockedAchievements(),
     achievementsTotal:getTotalAchievements(),
     libraryValue:state.steamExtras?.libraryValue?.currentValueCents || 0,
+    playtimeMilestone:getPlaytimeMilestoneData().unlocked.at(-1)?.title || "",
     theme:state.selectedTheme,
     badge:getSelectedBadge().name,
     displayName:state.customDisplayName || state.steamProfile?.username || "",
@@ -1885,7 +1952,7 @@ function renderQuickLaunchDock() {
 
   dock.classList.remove("hidden");
   dock.innerHTML = `
-    <div class="quick-launch-label">Recent + Pins</div>
+    <div class="quick-launch-label">Quick Launch</div>
 
     <div class="quick-launch-games">
       ${games.map(game => `
@@ -2265,6 +2332,11 @@ function renderAppInfo() {
         <p>The bottom dock shows pinned games and recent games. Pressing a dock game launches it through Steam directly.</p>
       </section>
 
+      <section class="app-info-card">
+        <h2>Playtime Milestones</h2>
+        <p>Milestones reward longer play across your whole library, starting at 10 hours and continuing through 1,000 tracked hours.</p>
+      </section>
+
       <section class="app-info-card top-profiles-card">
         <h2>Top Vaults</h2>
         <div id="topProfilesList">
@@ -2385,6 +2457,41 @@ function renderShowcase() {
   `).join("");
 }
 
+function renderPlaytimeMilestones() {
+  const container = document.getElementById("playtimeMilestones");
+
+  if (!container) return;
+
+  const { totalHours, unlocked, next } = getPlaytimeMilestoneData();
+  const featured = unlocked.slice(-3).reverse();
+
+  container.innerHTML = `
+    <div class="milestone-title">
+      <strong>Playtime Milestones</strong>
+      <small>${next ? `${Math.max(0, next.hours - totalHours)}h until ${next.title}` : "All tracked milestones unlocked"}</small>
+    </div>
+
+    <div class="milestone-list">
+      ${
+        featured.length
+          ? featured.map(milestone => `
+            <div class="milestone-pill unlocked">
+              <strong>${escapeHtml(milestone.title)}</strong>
+              <small>${milestone.hours}h</small>
+            </div>
+          `).join("")
+          : `<div class="milestone-pill"><strong>First steps</strong><small>${totalHours}/10h</small></div>`
+      }
+      ${next ? `
+        <div class="milestone-pill next">
+          <strong>${escapeHtml(next.title)}</strong>
+          <small>${totalHours}/${next.hours}h</small>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderActivityFeed() {
   const container = document.getElementById("activityFeed");
 
@@ -2409,7 +2516,7 @@ function renderActivityFeed() {
 
   container.innerHTML = items.map(item => `
     <div class="activity-item">
-      <span class="activity-icon">${getActivityIcon(item)}</span>
+      ${renderActivityIconMarkup(item)}
 
       <div>
         <strong>${item.text}</strong><br>
@@ -2422,6 +2529,7 @@ function renderActivityFeed() {
 function renderHome() {
   renderProfile();
   renderShowcase();
+  renderPlaytimeMilestones();
   refreshActivityPanels();
 
   const game = getRecentGame();
@@ -3034,29 +3142,23 @@ function renderAchievementHuntingPanel() {
           `).join("") : `<p>No tracked achievement targets yet.</p>`}
         </div>
 
-        <div class="hunting-card">
-          <strong>Rarest Missing</strong>
-          ${rareMissing.length ? rareMissing.map(item => `
-            ${renderAchievementTargetButton(item)}
-          `).join("") : fallbackMissing.length ? `
-            <p>Steam did not return rare missing data yet, so these are your next missing targets.</p>
-            ${fallbackMissing.map(item => `
-              ${renderAchievementTargetButton(item)}
-            `).join("")}
-          ` : `<p>No missing achievements found.</p>`}
-        </div>
+        ${renderExpandableHuntingCard({
+          title:"Rarest Missing",
+          panelKey:"rareMissing",
+          items:rareMissing,
+          fallbackItems:fallbackMissing,
+          fallbackText:"Steam did not return rare missing data yet, so these are your next missing targets.",
+          emptyText:"No missing achievements found."
+        })}
 
-        <div class="hunting-card">
-          <strong>Rare Wins</strong>
-          ${rareUnlocked.length ? rareUnlocked.map(item => `
-            ${renderAchievementTargetButton(item)}
-          `).join("") : fallbackUnlocked.length ? `
-            <p>Steam did not return rare win data yet, so these are your latest unlocked targets.</p>
-            ${fallbackUnlocked.map(item => `
-              ${renderAchievementTargetButton(item)}
-            `).join("")}
-          ` : `<p>No unlocked achievements yet.</p>`}
-        </div>
+        ${renderExpandableHuntingCard({
+          title:"Rare Wins",
+          panelKey:"rareWins",
+          items:rareUnlocked,
+          fallbackItems:fallbackUnlocked,
+          fallbackText:"Steam did not return rare win data yet, so these are your latest unlocked targets.",
+          emptyText:"No unlocked achievements yet."
+        })}
       </div>
     </div>
   `;
@@ -3077,6 +3179,17 @@ window.toggleAchievementHunt = function(achievementId) {
     state.pinnedAchievementIds.push(achievementId);
   }
 
+  saveState();
+  renderAchievements();
+};
+
+window.toggleHuntingPanel = function(panelKey) {
+  state.huntingExpanded = {
+    rareMissing:false,
+    rareWins:false,
+    ...state.huntingExpanded,
+    [panelKey]:!state.huntingExpanded?.[panelKey]
+  };
   saveState();
   renderAchievements();
 };
@@ -3800,7 +3913,7 @@ function renderGoals() {
 
   visibleGoals.forEach(goal => {
     const game = state.games.find(item => item.id === goal.gameId);
-    const groupName = goal.gameId ? game.name : "Global";
+    const groupName = goal.gameId ? game?.name || "Missing game" : "Global";
 
     if (!groups[groupName]) {
       groups[groupName] = [];

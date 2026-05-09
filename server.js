@@ -483,6 +483,7 @@ app.post("/api/gamevault/profile", (req, res) => {
     achievementsUnlocked:Math.max(0, Math.floor(Number(req.body?.achievementsUnlocked) || 0)),
     achievementsTotal:Math.max(0, Math.floor(Number(req.body?.achievementsTotal) || 0)),
     libraryValue:Math.max(0, Math.floor(Number(req.body?.libraryValue) || 0)),
+    playtimeMilestone:String(req.body?.playtimeMilestone || ""),
     theme:String(req.body?.theme || "default"),
     badge:String(req.body?.badge || ""),
     displayName:String(req.body?.displayName || steamProfile.username),
