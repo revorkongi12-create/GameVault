@@ -853,9 +853,10 @@ button:active,
 }
 
 .quick-launch-games{
+  flex:1 1 auto;
   min-width:0;
-  display:flex;
-  flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
   gap:8px;
   max-height:90px;
   overflow-y:auto;
@@ -863,8 +864,7 @@ button:active,
 }
 
 .quick-launch-item{
-  flex:1 1 150px;
-  max-width:190px;
+  min-width:0;
   display:grid;
   grid-template-columns:58px minmax(0,1fr);
   align-items:center;
@@ -2543,7 +2543,7 @@ button:active,
   }
 
   .quick-launch-item{
-    flex-basis:138px;
+    grid-template-columns:50px minmax(0,1fr);
   }
 
   .friends-layout{
