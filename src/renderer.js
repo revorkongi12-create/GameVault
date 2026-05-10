@@ -90,6 +90,8 @@ const state = {
   sessionHistory: [],
   selectedTheme: "default",
   selectedUiStyle: "vault",
+  customAccent: "",
+  customAccent2: "",
   selectedBadge: "none",
   customDisplayName: "",
   customAvatar: "",
@@ -132,6 +134,8 @@ const profileScopedStateKeys = [
   "sessionHistory",
   "selectedTheme",
   "selectedUiStyle",
+  "customAccent",
+  "customAccent2",
   "selectedBadge",
   "customDisplayName",
   "customAvatar",
@@ -154,7 +158,10 @@ function saveState() {
     saveProfileScopedState(state.steamProfile.steamid);
   }
 
-  localStorage.setItem("gameVault", JSON.stringify(state));
+  localStorage.setItem("gameVault", JSON.stringify({
+    steamProfile:state.steamProfile,
+    keybinds:state.keybinds
+  }));
 }
 
 function getProfileStateStorageKey(steamid) {
@@ -175,6 +182,8 @@ function getDefaultProfileScopedState() {
     sessionHistory: [],
     selectedTheme: "default",
     selectedUiStyle: "vault",
+    customAccent: "",
+    customAccent2: "",
     selectedBadge: "none",
     customDisplayName: "",
     customAvatar: "",
@@ -244,6 +253,8 @@ function normalizeProfileScopedState() {
   if (!Array.isArray(state.sessionHistory)) state.sessionHistory = [];
   if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
   if (!Array.isArray(state.pinnedGameIds)) state.pinnedGameIds = [];
+  if (!("customAccent" in state)) state.customAccent = "";
+  if (!("customAccent2" in state)) state.customAccent2 = "";
   if (!state.huntingExpanded) state.huntingExpanded = { rareMissing:false, rareWins:false };
   if (!state.visibleFriendsCount) state.visibleFriendsCount = 8;
 }
@@ -308,6 +319,8 @@ function loadState() {
     if (!state.sessionHistory) state.sessionHistory = [];
     if (!("selectedTheme" in state)) state.selectedTheme = "default";
     if (!("selectedUiStyle" in state)) state.selectedUiStyle = "vault";
+    if (!("customAccent" in state)) state.customAccent = "";
+    if (!("customAccent2" in state)) state.customAccent2 = "";
     if (!("selectedBadge" in state)) state.selectedBadge = "none";
     if (!("customDisplayName" in state)) state.customDisplayName = "";
     if (!("customAvatar" in state)) state.customAvatar = "";
@@ -335,6 +348,10 @@ function loadState() {
     if (!state.huntingExpanded) state.huntingExpanded = { rareMissing:false, rareWins:false };
     if (!state.keybinds) state.keybinds = {};
     state.keybinds = normalizeKeybinds(state.keybinds);
+
+    if (state.steamProfile?.steamid) {
+      applyProfileScopedState(state.steamProfile.steamid);
+    }
 
     if (!state.steamLibrarySyncedAt && isOldPlaceholderLibrary(state.games)) {
       state.games = [];
@@ -370,6 +387,8 @@ function loadState() {
     state.sessionHistory = [];
     state.selectedTheme = "default";
     state.selectedUiStyle = "vault";
+    state.customAccent = "";
+    state.customAccent2 = "";
     state.selectedBadge = "none";
     state.customDisplayName = "";
     state.customAvatar = "";
@@ -523,6 +542,16 @@ const profileThemes = [
   { id:"green", name:"Vault Green" },
   { id:"red", name:"Vault Red" },
   { id:"purple", name:"Vault Purple" },
+  { id:"crimson", name:"Crimson Glass" },
+  { id:"emerald", name:"Emerald Grid" },
+  { id:"violet", name:"Violet Rift" },
+  { id:"rose", name:"Rose Neon" },
+  { id:"arctic", name:"Arctic White" },
+  { id:"copper", name:"Copper Core" },
+  { id:"lime", name:"Lime Circuit" },
+  { id:"indigo", name:"Indigo Night" },
+  { id:"teal", name:"Teal Signal" },
+  { id:"mono", name:"Mono Steel" },
   { id:"owner", name:"Owner Ember", special:"owner" },
   { id:"patreonBronze", name:"Patreon Bronze", special:"patreon", tier:1 },
   { id:"patreonSilver", name:"Patreon Silver", special:"patreon", tier:2 },
@@ -536,6 +565,21 @@ const profileThemes = [
   { id:"obsidian", name:"Obsidian" },
   { id:"sunset", name:"Sunset" },
   { id:"mint", name:"Mint" }
+];
+
+const colorPresetIdeas = [
+  { name:"Amber", accent:"#ff8a2a", accent2:"#ffbf69" },
+  { name:"Blue", accent:"#66c0f4", accent2:"#1b75bb" },
+  { name:"Green", accent:"#56d68a", accent2:"#1d8a4a" },
+  { name:"Red", accent:"#ff5d73", accent2:"#7a1f2f" },
+  { name:"Purple", accent:"#b983ff", accent2:"#6d4aff" },
+  { name:"Crimson", accent:"#ff375f", accent2:"#ff9f1c" },
+  { name:"Emerald", accent:"#00d084", accent2:"#78ffd6" },
+  { name:"Violet", accent:"#8f5cff", accent2:"#ff77e9" },
+  { name:"Arctic", accent:"#e8f7ff", accent2:"#7dd3fc" },
+  { name:"Copper", accent:"#c77d31", accent2:"#f4d35e" },
+  { name:"Lime", accent:"#c3ff00", accent2:"#00ffa3" },
+  { name:"Teal", accent:"#2dd4bf", accent2:"#38bdf8" }
 ];
 
 const profileBadges = [
@@ -739,12 +783,64 @@ function applySelectedTheme() {
   }
 
   document.body.dataset.theme = state.selectedTheme || "default";
+  applyCustomColors();
 }
 
 function applySelectedUiStyle() {
   document.body.dataset.uiStyle = uiStyles.some(style => style.id === state.selectedUiStyle)
     ? state.selectedUiStyle
     : "vault";
+}
+
+function isValidHexColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || ""));
+}
+
+function hexToRgb(value) {
+  if (!isValidHexColor(value)) return null;
+
+  const hex = value.slice(1);
+
+  return {
+    r:parseInt(hex.slice(0, 2), 16),
+    g:parseInt(hex.slice(2, 4), 16),
+    b:parseInt(hex.slice(4, 6), 16)
+  };
+}
+
+function mixHexColor(colorA, colorB, amount = .5) {
+  const a = hexToRgb(colorA);
+  const b = hexToRgb(colorB);
+
+  if (!a || !b) return colorA;
+
+  const mix = channel => Math.round(a[channel] + (b[channel] - a[channel]) * amount)
+    .toString(16)
+    .padStart(2, "0");
+
+  return `#${mix("r")}${mix("g")}${mix("b")}`;
+}
+
+function applyCustomColors() {
+  const accent = isValidHexColor(state.customAccent) ? state.customAccent : "";
+  const accent2 = isValidHexColor(state.customAccent2)
+    ? state.customAccent2
+    : accent
+      ? mixHexColor(accent, "#ffffff", .36)
+      : "";
+
+  if (!accent) {
+    document.body.style.removeProperty("--accent");
+    document.body.style.removeProperty("--accent2");
+    document.body.style.removeProperty("--theme-glow");
+    return;
+  }
+
+  const rgb = hexToRgb(accent);
+
+  document.body.style.setProperty("--accent", accent);
+  document.body.style.setProperty("--accent2", accent2);
+  document.body.style.setProperty("--theme-glow", `rgba(${rgb.r},${rgb.g},${rgb.b},.24)`);
 }
 
 function isOwnerAccount() {
@@ -2279,6 +2375,35 @@ function renderSettings() {
           ${uiStyles.map(style => `<option value="${style.id}" ${state.selectedUiStyle === style.id ? "selected" : ""}>${style.name}</option>`).join("")}
         </select>
 
+        <label>Custom UI Colors</label>
+        <div class="color-picker-row">
+          <label>
+            <span>Main shade</span>
+            <input id="customAccentInput" type="color" value="${isValidHexColor(state.customAccent) ? state.customAccent : "#ff8a2a"}" />
+          </label>
+          <label>
+            <span>Glow shade</span>
+            <input id="customAccent2Input" type="color" value="${isValidHexColor(state.customAccent2) ? state.customAccent2 : "#ffbf69"}" />
+          </label>
+          <button id="clearCustomColorsBtn" class="secondary-btn" type="button">Use Theme Colors</button>
+        </div>
+
+        <div class="color-preset-grid">
+          ${colorPresetIdeas.map(preset => `
+            <button
+              class="color-swatch-btn"
+              type="button"
+              data-accent="${preset.accent}"
+              data-accent2="${preset.accent2}"
+              title="${preset.name}"
+              style="--swatch-a:${preset.accent};--swatch-b:${preset.accent2};"
+            >
+              <span></span>
+              ${preset.name}
+            </button>
+          `).join("")}
+        </div>
+
         <label for="badgeSelect">Display Badge</label>
         <select id="badgeSelect" class="settings-select">
           ${profileBadges.map(badge => {
@@ -2355,6 +2480,36 @@ function renderSettings() {
     saveState();
     applySelectedUiStyle();
   };
+
+  document.getElementById("customAccentInput").oninput = event => {
+    state.customAccent = event.target.value;
+    saveState();
+    applyCustomColors();
+  };
+
+  document.getElementById("customAccent2Input").oninput = event => {
+    state.customAccent2 = event.target.value;
+    saveState();
+    applyCustomColors();
+  };
+
+  document.getElementById("clearCustomColorsBtn").onclick = () => {
+    state.customAccent = "";
+    state.customAccent2 = "";
+    saveState();
+    applyCustomColors();
+    renderSettings();
+  };
+
+  document.querySelectorAll(".color-swatch-btn").forEach(button => {
+    button.onclick = () => {
+      state.customAccent = button.dataset.accent;
+      state.customAccent2 = button.dataset.accent2;
+      saveState();
+      applyCustomColors();
+      renderSettings();
+    };
+  });
 
   document.getElementById("badgeSelect").onchange = event => {
     state.selectedBadge = event.target.value;
@@ -4791,6 +4946,14 @@ document.addEventListener("keydown", event => {
 });
 
 document.addEventListener("click", event => {
+  const pulseTarget = event.target.closest("button, .game-card, .trophy-card, .achievement-item, .friend-row, .friend-game-card, .insight-toggle, .quick-launch-item");
+
+  if (pulseTarget && !pulseTarget.disabled) {
+    pulseTarget.classList.remove("gv-pulse");
+    void pulseTarget.offsetWidth;
+    pulseTarget.classList.add("gv-pulse");
+  }
+
   const inviteButton = event.target.closest(".game-invite-btn");
 
   if (inviteButton) {
