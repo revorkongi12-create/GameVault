@@ -2388,6 +2388,28 @@ window.quickLaunchGame = function(gameId) {
   simulateLaunch(game);
 };
 
+function bindElement(id, eventName, handler) {
+  const element = document.getElementById(id);
+
+  if (!element) return null;
+
+  element[eventName] = handler;
+  return element;
+}
+
+function attachSettingsDropdowns() {
+  document.querySelectorAll(".settings-toggle-btn").forEach(button => {
+    button.onclick = () => {
+      const panel = document.getElementById(button.dataset.settingsTarget);
+
+      if (!panel) return;
+
+      panel.classList.toggle("hidden");
+      button.classList.toggle("open", !panel.classList.contains("hidden"));
+    };
+  });
+}
+
 function renderSettings() {
   const panel = document.getElementById("settingsPanel");
   const unlockedThemes = getUnlockedThemes();
@@ -2580,66 +2602,68 @@ function renderSettings() {
     </div>
   `;
 
-  document.getElementById("openSteamProfileBtn").onclick = () => {
+  attachSettingsDropdowns();
+
+  bindElement("openSteamProfileBtn", "onclick", () => {
     if (state.steamProfile?.profileUrl) {
       shell.openExternal(state.steamProfile.profileUrl);
     }
-  };
+  });
 
-  document.getElementById("disconnectSteamBtn").onclick = () => {
+  bindElement("disconnectSteamBtn", "onclick", () => {
     disconnectSteamProfile();
-  };
+  });
 
-  document.getElementById("syncSteamLibraryBtn").onclick = async () => {
+  bindElement("syncSteamLibraryBtn", "onclick", async () => {
     await syncSteamLibrary();
     renderSettings();
-  };
+  });
 
-  document.getElementById("syncLocalLibrariesBtn").onclick = async () => {
+  bindElement("syncLocalLibrariesBtn", "onclick", async () => {
     await syncLocalLibrarySources();
     renderSettings();
-  };
+  });
 
-  document.getElementById("refreshSteamExtrasBtn").onclick = async () => {
+  bindElement("refreshSteamExtrasBtn", "onclick", async () => {
     state.steamExtras = null;
     saveState();
     await fetchSteamExtras();
     renderSettings();
     renderHome();
-  };
+  });
 
-  document.getElementById("themeSelect").onchange = event => {
+  bindElement("themeSelect", "onchange", event => {
     state.selectedTheme = event.target.value;
     saveState();
     applySelectedTheme();
     renderHome();
     publishGameVaultProfile();
-  };
+  });
 
-  document.getElementById("uiStyleSelect").onchange = event => {
+  bindElement("uiStyleSelect", "onchange", event => {
     state.selectedUiStyle = event.target.value;
     saveState();
     applySelectedUiStyle();
-  };
+  });
 
-  document.getElementById("saveCustomColorsBtn").onclick = () => {
-    state.customAccent = document.getElementById("customAccentInput").value;
-    state.customAccent2 = document.getElementById("customAccent2Input").value;
+  bindElement("saveCustomColorsBtn", "onclick", () => {
+    state.customAccent = document.getElementById("customAccentInput")?.value || "";
+    state.customAccent2 = document.getElementById("customAccent2Input")?.value || "";
     saveState();
     applyCustomColors();
     renderHome();
     publishGameVaultProfile();
-  };
+  });
 
-  document.getElementById("clearCustomColorsBtn").onclick = () => {
+  bindElement("clearCustomColorsBtn", "onclick", () => {
     state.customAccent = "";
     state.customAccent2 = "";
     saveState();
     applyCustomColors();
-    document.getElementById("customAccentInput").value = "#ff8a2a";
-    document.getElementById("customAccent2Input").value = "#ffbf69";
+    if (document.getElementById("customAccentInput")) document.getElementById("customAccentInput").value = "#ff8a2a";
+    if (document.getElementById("customAccent2Input")) document.getElementById("customAccent2Input").value = "#ffbf69";
     renderHome();
-  };
+  });
 
   document.querySelectorAll(".color-swatch-btn").forEach(button => {
     button.onclick = () => {
@@ -2647,49 +2671,49 @@ function renderSettings() {
       state.customAccent2 = button.dataset.accent2;
       saveState();
       applyCustomColors();
-      document.getElementById("customAccentInput").value = state.customAccent;
-      document.getElementById("customAccent2Input").value = state.customAccent2;
+      if (document.getElementById("customAccentInput")) document.getElementById("customAccentInput").value = state.customAccent;
+      if (document.getElementById("customAccent2Input")) document.getElementById("customAccent2Input").value = state.customAccent2;
       renderHome();
     };
   });
 
-  document.getElementById("badgeSelect").onchange = event => {
+  bindElement("badgeSelect", "onchange", event => {
     state.selectedBadge = event.target.value;
     saveState();
     renderHome();
     publishGameVaultProfile();
-  };
+  });
 
   ["displayNameInput", "profileBioInput", "profileBackgroundInput"].forEach(id => {
-    document.getElementById(id).oninput = event => {
+    bindElement(id, "oninput", event => {
       if (id === "displayNameInput") state.customDisplayName = event.target.value.trim();
       if (id === "profileBioInput") state.profileBio = event.target.value.trim();
       if (id === "profileBackgroundInput") state.profileBackground = event.target.value.trim();
 
       saveState();
       renderHome();
-    };
+    });
   });
 
-  document.getElementById("profileBackgroundPresetSelect").onchange = event => {
+  bindElement("profileBackgroundPresetSelect", "onchange", event => {
     state.profileBackgroundPreset = event.target.value;
     saveState();
     renderHome();
-  };
+  });
 
-  document.getElementById("profileLayoutSelect").onchange = event => {
+  bindElement("profileLayoutSelect", "onchange", event => {
     state.profileLayout = event.target.value;
     saveState();
     renderHome();
-  };
+  });
 
-  document.getElementById("clearAvatarBtn").onclick = () => {
+  bindElement("clearAvatarBtn", "onclick", () => {
     state.customAvatar = "";
     saveState();
     renderHome();
-  };
+  });
 
-  document.getElementById("resetProfileCustomizationBtn").onclick = () => {
+  bindElement("resetProfileCustomizationBtn", "onclick", () => {
     state.customDisplayName = "";
     state.customAvatar = "";
     state.profileBio = "";
@@ -2707,9 +2731,9 @@ function renderSettings() {
     saveState();
     renderSettings();
     renderHome();
-  };
+  });
 
-  document.getElementById("avatarInputSettings").onchange = event => {
+  bindElement("avatarInputSettings", "onchange", event => {
     const file = event.target.files?.[0];
 
     if (!file) return;
@@ -2722,7 +2746,7 @@ function renderSettings() {
       renderHome();
     };
     reader.readAsDataURL(file);
-  };
+  });
 
   document.querySelectorAll("[data-profile-stat]").forEach(input => {
     input.onchange = event => {
@@ -2762,21 +2786,10 @@ function renderSettings() {
     };
   });
 
-  document.getElementById("resetKeybindsBtn").onclick = () => {
+  bindElement("resetKeybindsBtn", "onclick", () => {
     state.keybinds = normalizeKeybinds({});
     saveState();
     renderSettings();
-  };
-
-  document.querySelectorAll(".settings-toggle-btn").forEach(button => {
-    button.onclick = () => {
-      const panel = document.getElementById(button.dataset.settingsTarget);
-
-      if (!panel) return;
-
-      panel.classList.toggle("hidden");
-      button.classList.toggle("open", !panel.classList.contains("hidden"));
-    };
   });
 }
 
