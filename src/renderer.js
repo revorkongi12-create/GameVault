@@ -1442,7 +1442,7 @@ function getSafeImageMarkup(game, className = "") {
   const classAttribute = className ? ` class="${escapeHtml(className)}"` : "";
   const altText = escapeHtml(game.name || game.game || "Game cover");
   const appid = escapeHtml(game.appid || "");
-  const cover = escapeHtml(game.cover || getSteamGameCover(game.appid || ""));
+  const cover = escapeHtml(game.cover || game.image || (game.appid ? getSteamGameCover(game.appid) : getGameImagePlaceholder(game.name || game.game)));
 
   return `<img${classAttribute} src="${cover}" alt="${altText}" data-appid="${appid}" data-game-name="${altText}" data-fallback-index="0" onerror="handleGameImageError(this)">`;
 }
@@ -3089,7 +3089,7 @@ function renderLibrary() {
         <strong>${game.name}</strong>
         <p>${game.hours}h - ${game.completion}%</p>
         <small>${getBacklogLabel(game.backlogStatus)}</small>
-        <span class="library-source ${game.accessType === "owned" ? "" : "shared-source"}">${getAccessTypeLabel(game.accessType)}</span>
+        <span class="library-source ${game.accessType === "owned" ? "" : "shared-source"}">${escapeHtml(game.localSourceLabel || getAccessTypeLabel(game.accessType))}</span>
       </div>
     `;
 

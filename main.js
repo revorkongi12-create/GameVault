@@ -98,16 +98,66 @@ function findFirstExisting(paths) {
   return paths.find(pathExists) || "";
 }
 
+function normalizePathKey(filePath = "") {
+  return String(filePath || "").toLowerCase().replace(/[\\/]+$/g, "");
+}
+
+function isLikelyEpicContentOnly(manifest) {
+  const typeText = [
+    manifest.AppCategories,
+    manifest.Categories,
+    manifest.AppType,
+    manifest.InstallationType,
+    manifest.MainGameAppName
+  ]
+    .flat()
+    .filter(Boolean)
+    .map(value => typeof value === "string" ? value : JSON.stringify(value))
+    .join(" ")
+    .toLowerCase();
+  const executable = String(manifest.LaunchExecutable || "").trim();
+
+  if (!executable && /(dlc|addon|add-on|plugin|content|map|episode|chunk)/i.test(typeText)) return true;
+  if (!executable && manifest.MainGameAppName) return true;
+
+  return false;
+}
+
+function getEpicSortScore(manifest) {
+  let score = 0;
+
+  if (manifest.LaunchExecutable) score += 20;
+  if (manifest.CatalogItemId) score += 8;
+  if (manifest.AppName && !/dlc|addon|content|map|chunk/i.test(manifest.AppName)) score += 4;
+  if (manifest.MainGameAppName) score -= 12;
+
+  return score;
+}
+
 function getEpicManifestGames() {
   const manifestDir = path.join(process.env.PROGRAMDATA || "C:\\ProgramData", "Epic", "EpicGamesLauncher", "Data", "Manifests");
 
   if (!pathExists(manifestDir)) return [];
 
-  return fs.readdirSync(manifestDir)
+  const manifests = fs.readdirSync(manifestDir)
     .filter(file => file.endsWith(".item"))
     .map(file => readJsonFile(path.join(manifestDir, file)))
     .filter(Boolean)
     .filter(manifest => manifest.DisplayName && manifest.InstallLocation)
+    .filter(manifest => !isLikelyEpicContentOnly(manifest));
+  const manifestsByGame = new Map();
+
+  manifests.forEach(manifest => {
+    const key = normalizePathKey(manifest.InstallLocation) ||
+      String(manifest.CatalogItemId || manifest.AppName || manifest.DisplayName).toLowerCase();
+    const existing = manifestsByGame.get(key);
+
+    if (!existing || getEpicSortScore(manifest) > getEpicSortScore(existing)) {
+      manifestsByGame.set(key, manifest);
+    }
+  });
+
+  return [...manifestsByGame.values()]
     .map(manifest => {
       const executablePath = manifest.LaunchExecutable
         ? path.join(manifest.InstallLocation, manifest.LaunchExecutable)
@@ -161,8 +211,51 @@ function getModrinthPath() {
 
   return findFirstExisting([
     path.join(localAppData, "Programs", "Modrinth App", "Modrinth App.exe"),
-    path.join(localAppData, "Modrinth App", "Modrinth App.exe")
+    path.join(localAppData, "Modrinth App", "Modrinth App.exe"),
+    path.join(localAppData, "Programs", "ModrinthApp", "Modrinth App.exe")
   ]);
+}
+
+function filePathToImageUrl(filePath) {
+  if (!filePath || !pathExists(filePath)) return "";
+
+  return `file:///${filePath.replace(/\\/g, "/").replace(/#/g, "%23")}`;
+}
+
+function findInstanceImage(instancePath, manifest = null) {
+  const candidates = [
+    manifest?.logo,
+    manifest?.icon,
+    manifest?.iconUrl,
+    manifest?.profileImagePath,
+    "icon.png",
+    "icon.jpg",
+    "icon.jpeg",
+    "logo.png",
+    "logo.jpg",
+    "cover.png",
+    "cover.jpg",
+    "profile.png"
+  ]
+    .filter(Boolean)
+    .map(candidate => path.isAbsolute(candidate) ? candidate : path.join(instancePath, candidate));
+
+  return filePathToImageUrl(findFirstExisting(candidates));
+}
+
+function getModrinthProfileRoots() {
+  const appData = process.env.APPDATA || "";
+  const localAppData = process.env.LOCALAPPDATA || "";
+
+  return [
+    path.join(appData, "com.modrinth.theseus", "profiles"),
+    path.join(appData, "ModrinthApp", "profiles"),
+    path.join(appData, "Modrinth App", "profiles"),
+    path.join(localAppData, "com.modrinth.theseus", "profiles"),
+    path.join(localAppData, "com.modrinth.theseus", "app", "profiles"),
+    path.join(localAppData, "ModrinthApp", "profiles"),
+    path.join(localAppData, "Modrinth App", "profiles")
+  ].filter(pathExists);
 }
 
 function getMinecraftGames() {
@@ -226,6 +319,7 @@ function getMinecraftGames() {
         const instancePath = path.join(curseInstancesRoot, entry.name);
         const manifest = readJsonFile(path.join(instancePath, "manifest.json"));
         const name = manifest?.name || entry.name;
+        const image = findInstanceImage(instancePath, manifest);
 
         games.push({
           id:`minecraft:curseforge:${entry.name}`,
@@ -235,7 +329,8 @@ function getMinecraftGames() {
           hours:0,
           recentHours:0,
           completion:0,
-          image:"",
+          image,
+          cover:image,
           achievements:[],
           genres:["Sandbox", "Modded"],
           installPath:instancePath,
@@ -247,15 +342,18 @@ function getMinecraftGames() {
   }
 
   const modrinthPath = getModrinthPath();
-  const modrinthProfilesRoot = path.join(appData, "com.modrinth.theseus", "profiles");
+  const modrinthProfileRoots = getModrinthProfileRoots();
 
-  if (pathExists(modrinthProfilesRoot)) {
+  modrinthProfileRoots.forEach(modrinthProfilesRoot => {
     fs.readdirSync(modrinthProfilesRoot, { withFileTypes:true })
       .filter(entry => entry.isDirectory())
       .forEach(entry => {
         const instancePath = path.join(modrinthProfilesRoot, entry.name);
-        const profile = readJsonFile(path.join(instancePath, "profile.json"));
+        const profile = readJsonFile(path.join(instancePath, "profile.json")) ||
+          readJsonFile(path.join(instancePath, "profile.json5")) ||
+          readJsonFile(path.join(instancePath, "metadata.json"));
         const name = profile?.name || entry.name;
+        const image = findInstanceImage(instancePath, profile);
 
         games.push({
           id:`minecraft:modrinth:${entry.name}`,
@@ -265,7 +363,8 @@ function getMinecraftGames() {
           hours:0,
           recentHours:0,
           completion:0,
-          image:"",
+          image,
+          cover:image,
           achievements:[],
           genres:["Sandbox", "Modded"],
           installPath:instancePath,
@@ -274,7 +373,7 @@ function getMinecraftGames() {
           localSourceLabel:"Modrinth"
         });
       });
-  }
+  });
 
   const seen = new Set();
 
