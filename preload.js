@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("gameVault", {
   openExternal(url) {
     return ipcRenderer.invoke("open-external", url);
   },
+  scanLocalLibrarySources() {
+    return ipcRenderer.invoke("scan-local-library-sources");
+  },
+  launchLocalGame(game) {
+    return ipcRenderer.invoke("launch-local-game", game);
+  },
   toggleFullscreen() {
     ipcRenderer.send("toggle-fullscreen");
   }

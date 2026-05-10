@@ -409,6 +409,96 @@ body[data-ui-style="minimal"] .quick-launch-dock{
   left:98px;
 }
 
+body[data-ui-style="command"] .app{
+  flex-direction:column;
+}
+
+body[data-ui-style="command"] .sidebar{
+  width:100%;
+  min-height:92px;
+  flex-direction:row;
+  align-items:center;
+  padding:14px 18px;
+  border-right:none;
+  border-bottom:1px solid color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,.08));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 24%, #0b0b10), #11111a 44%, color-mix(in srgb, var(--accent2) 18%, #0b0b10));
+}
+
+body[data-ui-style="command"] .logo{
+  width:auto;
+  min-width:max-content;
+  margin:0 10px 0 0;
+}
+
+body[data-ui-style="command"] .back-btn,
+body[data-ui-style="command"] .nav-btn{
+  min-width:max-content;
+  text-align:center;
+  border-radius:999px;
+  padding:10px 13px;
+}
+
+body[data-ui-style="command"] .main{
+  padding-top:18px;
+}
+
+body[data-ui-style="command"] .main::before{
+  inset:92px 0 0 0;
+}
+
+body[data-ui-style="command"] .quick-launch-dock{
+  left:18px;
+}
+
+body[data-ui-style="command"] .profile-command-content{
+  min-height:170px;
+}
+
+body[data-ui-style="cinema"] .app{
+  flex-direction:row-reverse;
+}
+
+body[data-ui-style="cinema"] .sidebar{
+  width:220px;
+  border-right:none;
+  border-left:1px solid color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.08));
+  background:
+    linear-gradient(180deg, #060609, color-mix(in srgb, var(--accent) 16%, #0b0b10) 52%, #050508);
+}
+
+body[data-ui-style="cinema"] .main{
+  padding:18px 18px 132px;
+}
+
+body[data-ui-style="cinema"] .profile-command,
+body[data-ui-style="cinema"] .hero{
+  border-radius:0;
+  min-height:330px;
+}
+
+body[data-ui-style="cinema"] .profile-command-content,
+body[data-ui-style="cinema"] .hero-top{
+  align-items:flex-end;
+}
+
+body[data-ui-style="cinema"] .home-grid{
+  grid-template-columns:1fr;
+}
+
+body[data-ui-style="cinema"] .library-grid{
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+}
+
+body[data-ui-style="cinema"] .game-card img{
+  height:170px;
+}
+
+body[data-ui-style="cinema"] .quick-launch-dock{
+  left:18px;
+  right:238px;
+}
+
 button,
 .game-card,
 .trophy-card,
@@ -1558,12 +1648,29 @@ button:active,
 
 .list-item.legendary-achievement,
 .list-item.hard-achievement,
+.list-item.steam-glow-achievement,
+.list-item.rare-achievement,
 .hunting-target.legendary-achievement,
-.hunting-target.hard-achievement{
+.hunting-target.hard-achievement,
+.hunting-target.steam-glow-achievement,
+.hunting-target.rare-achievement{
   position:relative;
   overflow:hidden;
   padding:14px;
-  border:2px solid #f7e7b8;
+  border:2px solid color-mix(in srgb, var(--accent) 88%, rgba(255,255,255,.18));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, rgba(255,255,255,.05)), color-mix(in srgb, var(--accent2) 10%, rgba(255,255,255,.04))),
+    rgba(255,255,255,.055);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 40%, transparent),
+    0 0 22px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.list-item.legendary-achievement,
+.list-item.steam-glow-achievement,
+.hunting-target.legendary-achievement,
+.hunting-target.steam-glow-achievement{
+  border-color:#f7e7b8;
   background:
     linear-gradient(135deg, rgba(247,231,184,.16), rgba(102,192,244,.1)),
     rgba(255,255,255,.055);
@@ -2036,12 +2143,15 @@ button:active,
 
 .achievement-item.rare-achievement{
   position:relative;
-  border:2px solid color-mix(in srgb, var(--accent) 86%, rgba(255,255,255,.2));
+  overflow:hidden;
+  border:2px solid color-mix(in srgb, var(--accent) 92%, rgba(255,255,255,.25));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 34%, rgba(255,255,255,.06)), rgba(255,255,255,.05));
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 32%, rgba(255,255,255,.06)), color-mix(in srgb, var(--accent2) 12%, rgba(255,255,255,.05))),
+    rgba(255,255,255,.055);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 34%, transparent),
-    0 0 26px color-mix(in srgb, var(--accent) 44%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--accent2) 44%, transparent),
+    inset 0 0 0 5px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 46%, transparent);
 }
 
 .achievement-item.rare-achievement::before{
@@ -2050,12 +2160,14 @@ button:active,
   inset:4px;
   pointer-events:none;
   border-radius:9px;
-  border:1px solid color-mix(in srgb, var(--accent2) 54%, transparent);
-  opacity:.72;
+  border:1px solid color-mix(in srgb, var(--accent2) 78%, transparent);
+  clip-path:polygon(0 0, 22% 0, 22% 6px, 78% 6px, 78% 0, 100% 0, 100% 100%, 78% 100%, 78% calc(100% - 6px), 22% calc(100% - 6px), 22% 100%, 0 100%);
+  opacity:.95;
 }
 
 .achievement-item.legendary-achievement,
-.achievement-item.hard-achievement{
+.achievement-item.hard-achievement,
+.achievement-item.steam-glow-achievement{
   position:relative;
   overflow:hidden;
   border:2px solid #f7e7b8;
@@ -2083,10 +2195,13 @@ button:active,
 
 .achievement-item.legendary-achievement::before,
 .achievement-item.hard-achievement::before,
+.achievement-item.steam-glow-achievement::before,
 .list-item.legendary-achievement::before,
 .list-item.hard-achievement::before,
+.list-item.steam-glow-achievement::before,
 .hunting-target.legendary-achievement::before,
-.hunting-target.hard-achievement::before{
+.hunting-target.hard-achievement::before,
+.hunting-target.steam-glow-achievement::before{
   content:"";
   position:absolute;
   inset:5px;
@@ -2104,10 +2219,13 @@ button:active,
 
 .achievement-item.legendary-achievement::after,
 .achievement-item.hard-achievement::after,
+.achievement-item.steam-glow-achievement::after,
 .list-item.legendary-achievement::after,
 .list-item.hard-achievement::after,
+.list-item.steam-glow-achievement::after,
 .hunting-target.legendary-achievement::after,
-.hunting-target.hard-achievement::after{
+.hunting-target.hard-achievement::after,
+.hunting-target.steam-glow-achievement::after{
   content:"~<  >~";
   position:absolute;
   left:50%;

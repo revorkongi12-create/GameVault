@@ -4,6 +4,12 @@ const shell = window.gameVault || {
     window.open(url, "_blank");
     return Promise.resolve({ ok:true });
   },
+  scanLocalLibrarySources() {
+    return Promise.resolve({ ok:true, games:[] });
+  },
+  launchLocalGame() {
+    return Promise.resolve({ ok:false, error:"Local launching is only available in the desktop app." });
+  },
   toggleFullscreen() {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.();
@@ -110,6 +116,7 @@ const state = {
   steamExtras: null,
   steamProfile: null,
   steamLibrarySyncedAt: null,
+  localLibrarySyncedAt: null,
   steamAchievementsSyncedAt: null,
   achievementSyncVersion: 0,
   pinnedAchievementIds: [],
@@ -146,6 +153,7 @@ const profileScopedStateKeys = [
   "profileStatVisibility",
   "steamExtras",
   "steamLibrarySyncedAt",
+  "localLibrarySyncedAt",
   "steamAchievementsSyncedAt",
   "achievementSyncVersion",
   "pinnedAchievementIds",
@@ -201,6 +209,7 @@ function getDefaultProfileScopedState() {
     },
     steamExtras: null,
     steamLibrarySyncedAt: null,
+    localLibrarySyncedAt: null,
     steamAchievementsSyncedAt: null,
     achievementSyncVersion: 0,
     pinnedAchievementIds: [],
@@ -341,6 +350,7 @@ function loadState() {
     if (!("steamExtras" in state)) state.steamExtras = null;
     if (!("steamProfile" in state)) state.steamProfile = null;
     if (!("steamLibrarySyncedAt" in state)) state.steamLibrarySyncedAt = null;
+    if (!("localLibrarySyncedAt" in state)) state.localLibrarySyncedAt = null;
     if (!("steamAchievementsSyncedAt" in state)) state.steamAchievementsSyncedAt = null;
     if (!("achievementSyncVersion" in state)) state.achievementSyncVersion = 0;
     if (!Array.isArray(state.pinnedAchievementIds)) state.pinnedAchievementIds = [];
@@ -363,7 +373,8 @@ function loadState() {
       if (!game.achievements) game.achievements = [];
       if (!game.genres) game.genres = [];
       if (!("backlogStatus" in game)) game.backlogStatus = null;
-      if (!game.accessType) game.accessType = "owned";
+      if (!game.source) game.source = "steam";
+      if (!game.accessType) game.accessType = game.source === "steam" ? "owned" : game.source;
 
       game.achievements.forEach(achievement => {
         achievement.rarity = getAchievementRarityLabel(achievement);
@@ -407,6 +418,7 @@ function loadState() {
     state.steamExtras = null;
     state.steamProfile = null;
     state.steamLibrarySyncedAt = null;
+    state.localLibrarySyncedAt = null;
     state.steamAchievementsSyncedAt = null;
     state.achievementSyncVersion = 0;
     state.pinnedAchievementIds = [];
@@ -422,11 +434,23 @@ function loadState() {
 }
 
 function getCurrentGame() {
-  return state.games.find(game => game.id === state.currentGameId);
+  return state.games.find(game => String(game.id) === String(state.currentGameId));
+}
+
+function findGameById(gameId) {
+  return state.games.find(game => String(game.id) === String(gameId));
 }
 
 function getGameId(game) {
   return String(game?.appid || game?.id || "");
+}
+
+function isSteamGame(game) {
+  return !game?.source || game.source === "steam";
+}
+
+function isLocalLibraryGame(game) {
+  return ["epic", "minecraft"].includes(game?.source);
 }
 
 function isGamePinned(game) {
@@ -600,11 +624,11 @@ const profileBadges = [
 
 const uiStyles = [
   { id:"vault", name:"Vault Glass" },
-  { id:"compact", name:"Compact" },
   { id:"contrast", name:"High Contrast" },
-  { id:"flat", name:"Flat Panels" },
   { id:"arcade", name:"Arcade Glow" },
-  { id:"minimal", name:"Minimal Dark" }
+  { id:"minimal", name:"Minimal Dark" },
+  { id:"command", name:"Command Bar" },
+  { id:"cinema", name:"Cinema Deck" }
 ];
 
 const profileBackgroundPresets = [
@@ -787,9 +811,11 @@ function applySelectedTheme() {
 }
 
 function applySelectedUiStyle() {
-  document.body.dataset.uiStyle = uiStyles.some(style => style.id === state.selectedUiStyle)
-    ? state.selectedUiStyle
-    : "vault";
+  if (!uiStyles.some(style => style.id === state.selectedUiStyle)) {
+    state.selectedUiStyle = "vault";
+  }
+
+  document.body.dataset.uiStyle = state.selectedUiStyle;
 }
 
 function isValidHexColor(value) {
@@ -907,8 +933,9 @@ function isGameVaultRareAchievement(achievement) {
 
 function getAchievementRarityClass(achievement) {
   const rarity = getAchievementRarityLabel(achievement);
+  const glowClass = isSteamLegendaryAchievement(achievement) ? " steam-glow-achievement" : "";
 
-  return isGameVaultRareAchievement(achievement) ? ` ${rarity}-achievement rare-achievement` : "";
+  return isGameVaultRareAchievement(achievement) ? ` ${rarity}-achievement rare-achievement${glowClass}` : "";
 }
 
 function getAchievementHuntBadge(achievement) {
@@ -1129,7 +1156,11 @@ function getAccessTypeLabel(accessType) {
   const labels = {
     owned:"Owned / Steam Library",
     recent:"Recently Played",
-    familyOrFree:"Shared / Free / Recently Played"
+    familyOrFree:"Shared / Free / Recently Played",
+    epic:"Epic Games",
+    minecraft:"Minecraft",
+    minecraftCurseForge:"CurseForge",
+    minecraftModrinth:"Modrinth"
   };
 
   return labels[accessType] || labels.owned;
@@ -1281,6 +1312,26 @@ function launchSteamGame(game) {
   window.location.href = `steam://run/${game.appid}`;
 }
 
+async function launchGame(game) {
+  if (isLocalLibraryGame(game)) {
+    const result = await shell.launchLocalGame?.({
+      id:game.id,
+      name:game.name,
+      source:game.source,
+      installPath:game.installPath || "",
+      launchPath:game.launchPath || "",
+      launchUrl:game.launchUrl || ""
+    });
+
+    if (!result?.ok) {
+      alert(`Could not launch ${game.name}. ${result?.error || "No local launch target was found."}`);
+    }
+    return;
+  }
+
+  launchSteamGame(game);
+}
+
 window.openSteamProfileUrl = function(profileUrl) {
   if (profileUrl) {
     shell.openExternal(profileUrl);
@@ -1419,6 +1470,7 @@ function mapSteamGame(game) {
   return {
     id: game.appid,
     appid: game.appid,
+    source:"steam",
     name: game.name,
     hours: Math.round((game.playtime_forever || 0) / 60),
     recentHours: Math.round((game.playtime_2weeks || 0) / 60),
@@ -1436,6 +1488,7 @@ function mapFriendSteamGame(game) {
   return {
     id: game.appid,
     appid: game.appid,
+    source:"steam",
     name: game.name,
     hours: Math.round((game.playtime_forever || 0) / 60),
     lastPlayed: game.rtime_last_played ? game.rtime_last_played * 1000 : 0,
@@ -1644,7 +1697,7 @@ async function refreshRecentActivityData() {
   if (!state.steamProfile) return;
 
   const recentGames = await fetchRecentlyPlayedSteamGames();
-  const gamesByAppId = new Map(state.games.map(game => [String(game.appid), game]));
+  const gamesByAppId = new Map(state.games.filter(isSteamGame).map(game => [String(game.appid), game]));
 
   recentGames.forEach(recentGame => {
     const key = String(recentGame.appid);
@@ -1706,6 +1759,30 @@ async function refreshRecentActivityData() {
   renderQuickLaunchDock();
 }
 
+function mergeLibraryGames(existingGames, incomingGames, sourceFilter) {
+  const sourceMatches = game => {
+    if (Array.isArray(sourceFilter)) return sourceFilter.includes(game.source);
+    return sourceFilter ? game.source === sourceFilter : true;
+  };
+  const preservedGames = existingGames.filter(game => !sourceMatches(game));
+  const existingById = new Map(existingGames.map(game => [getGameId(game), game]));
+  const mergedIncoming = incomingGames.map(game => {
+    const existing = existingById.get(getGameId(game));
+
+    return {
+      ...(existing || {}),
+      ...game,
+      hours:existing?.hours || game.hours || 0,
+      lastPlayed:existing?.lastPlayed || game.lastPlayed || 0,
+      recentHours:game.recentHours || existing?.recentHours || 0,
+      achievements:game.achievements || existing?.achievements || [],
+      backlogStatus:existing?.backlogStatus || game.backlogStatus || null
+    };
+  });
+
+  return sortGamesAlphabetically([...preservedGames, ...mergedIncoming]);
+}
+
 async function syncSteamLibrary({ silent = false } = {}) {
   if (!state.steamProfile) return false;
 
@@ -1726,7 +1803,7 @@ async function syncSteamLibrary({ silent = false } = {}) {
     const importedGames = mergeSteamLibrarySources(ownedGames, recentGames);
     const hydratedGames = await hydrateSteamAchievements(importedGames);
 
-    state.games = sortGamesAlphabetically(hydratedGames);
+    state.games = mergeLibraryGames(state.games, hydratedGames, "steam");
     state.currentGameId = state.games[0]?.id || null;
     state.steamLibrarySyncedAt = Date.now();
     state.steamAchievementsSyncedAt = Date.now();
@@ -1743,6 +1820,59 @@ async function syncSteamLibrary({ silent = false } = {}) {
 
     if (!silent) {
       alert("Could not import your Steam library. Make sure your Steam game details are public, then try again.");
+    }
+
+    return false;
+  }
+}
+
+async function syncLocalLibrarySources({ silent = false } = {}) {
+  if (typeof shell.scanLocalLibrarySources !== "function") {
+    if (!silent) alert("This GameVault build cannot scan local launchers.");
+    return false;
+  }
+
+  try {
+    const result = await shell.scanLocalLibrarySources();
+
+    if (!result?.ok) {
+      throw new Error(result?.error || "Local launcher scan failed.");
+    }
+
+    const localGames = (result.games || [])
+      .filter(game => game.id && game.name)
+      .map(game => ({
+        ...game,
+        achievements:Array.isArray(game.achievements) ? game.achievements : [],
+        genres:Array.isArray(game.genres) ? game.genres : [],
+        completion:Number(game.completion) || 0,
+        hours:Number(game.hours) || 0,
+        recentHours:Number(game.recentHours) || 0
+      }));
+
+    state.games = mergeLibraryGames(state.games, localGames, ["epic", "minecraft"]);
+    state.localLibrarySyncedAt = Date.now();
+
+    if (!state.currentGameId) {
+      state.currentGameId = state.games[0]?.id || null;
+    }
+
+    saveState();
+    renderLibrary();
+    renderHome();
+    renderQuickLaunchDock();
+    await publishGameVaultProfile();
+
+    if (!silent) {
+      alert(`Imported ${localGames.length} Minecraft/Epic entries into GameVault.`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error(error);
+
+    if (!silent) {
+      alert(`Could not import Minecraft/Epic games. ${error.message}`);
     }
 
     return false;
@@ -2199,7 +2329,7 @@ function simulateLaunch(game) {
   saveState();
   renderHome();
   renderQuickLaunchDock();
-  launchSteamGame(game);
+  launchGame(game);
 }
 
 function renderQuickLaunchDock() {
@@ -2279,7 +2409,8 @@ function renderSettings() {
       </button>
 
       <div id="steamSettingsPanel" class="settings-panel">
-        <p>${state.steamLibrarySyncedAt ? `Library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Library has not been imported yet."}</p>
+        <p>${state.steamLibrarySyncedAt ? `Steam library and achievements imported ${new Date(state.steamLibrarySyncedAt).toLocaleString()}` : "Steam library has not been imported yet."}</p>
+        <p>${state.localLibrarySyncedAt ? `Minecraft/Epic library imported ${new Date(state.localLibrarySyncedAt).toLocaleString()}` : "Minecraft and Epic Games have not been imported yet."}</p>
         <p>Steam level: ${state.steamExtras?.steamLevel || steamExtrasLabel}</p>
         <p>Library value: ${state.steamExtras?.libraryValue?.currentValueFormatted || steamExtrasLabel}${state.steamExtras?.libraryValue ? ` current sale value / ${state.steamExtras.libraryValue.fullValueFormatted} full value (${state.steamExtras.libraryValue.pricedGameCount}/${state.steamExtras.libraryValue.gameCount} priced)` : ""}</p>
         <p>Inventory: ${state.steamExtras?.inventoryValue ? `${state.steamExtras.inventoryValue.itemCount} items, ${state.steamExtras.inventoryValue.marketableItemCount} marketable - ${state.steamExtras.inventoryValue.formatted}` : steamExtrasLabel}</p>
@@ -2291,6 +2422,10 @@ function renderSettings() {
 
         <button id="syncSteamLibraryBtn" class="primary-btn">
           Import Steam Library & Achievements
+        </button>
+
+        <button id="syncLocalLibrariesBtn" class="primary-btn">
+          Import Minecraft & Epic Games
         </button>
 
         <button id="refreshSteamExtrasBtn" class="secondary-btn">
@@ -2385,6 +2520,7 @@ function renderSettings() {
             <span>Glow shade</span>
             <input id="customAccent2Input" type="color" value="${isValidHexColor(state.customAccent2) ? state.customAccent2 : "#ffbf69"}" />
           </label>
+          <button id="saveCustomColorsBtn" class="primary-btn" type="button">Save Colors</button>
           <button id="clearCustomColorsBtn" class="secondary-btn" type="button">Use Theme Colors</button>
         </div>
 
@@ -2459,6 +2595,11 @@ function renderSettings() {
     renderSettings();
   };
 
+  document.getElementById("syncLocalLibrariesBtn").onclick = async () => {
+    await syncLocalLibrarySources();
+    renderSettings();
+  };
+
   document.getElementById("refreshSteamExtrasBtn").onclick = async () => {
     state.steamExtras = null;
     saveState();
@@ -2481,16 +2622,13 @@ function renderSettings() {
     applySelectedUiStyle();
   };
 
-  document.getElementById("customAccentInput").oninput = event => {
-    state.customAccent = event.target.value;
+  document.getElementById("saveCustomColorsBtn").onclick = () => {
+    state.customAccent = document.getElementById("customAccentInput").value;
+    state.customAccent2 = document.getElementById("customAccent2Input").value;
     saveState();
     applyCustomColors();
-  };
-
-  document.getElementById("customAccent2Input").oninput = event => {
-    state.customAccent2 = event.target.value;
-    saveState();
-    applyCustomColors();
+    renderHome();
+    publishGameVaultProfile();
   };
 
   document.getElementById("clearCustomColorsBtn").onclick = () => {
@@ -2498,7 +2636,9 @@ function renderSettings() {
     state.customAccent2 = "";
     saveState();
     applyCustomColors();
-    renderSettings();
+    document.getElementById("customAccentInput").value = "#ff8a2a";
+    document.getElementById("customAccent2Input").value = "#ffbf69";
+    renderHome();
   };
 
   document.querySelectorAll(".color-swatch-btn").forEach(button => {
@@ -2507,7 +2647,9 @@ function renderSettings() {
       state.customAccent2 = button.dataset.accent2;
       saveState();
       applyCustomColors();
-      renderSettings();
+      document.getElementById("customAccentInput").value = state.customAccent;
+      document.getElementById("customAccent2Input").value = state.customAccent2;
+      renderHome();
     };
   });
 
@@ -2753,7 +2895,7 @@ function renderProfile() {
 
   document.getElementById("totalHours").textContent = `${getTotalHours()}h`;
   document.getElementById("gamesOwned").textContent = state.games.length;
-  document.getElementById("userLevel").innerHTML = `Lvl ${levelData.level} <span class="level-stat-badges">${renderProfileBadgeRail({ includeLevel:false })}</span>`;
+  document.getElementById("userLevel").textContent = `Lvl ${levelData.level}`;
   document.getElementById("achievementScore").textContent = getAchievementScore();
   document.getElementById("steamLevel").textContent = state.steamExtras?.steamLevel || "--";
   document.getElementById("libraryValue").textContent = state.steamExtras?.libraryValue?.currentValueFormatted || "--";
@@ -2805,34 +2947,8 @@ function renderPlaytimeMilestones() {
 
   if (!container) return;
 
-  const { totalHours, unlocked, next } = getPlaytimeMilestoneData();
-  const featured = unlocked.slice(-3).reverse();
-
-  container.innerHTML = `
-    <div class="milestone-title">
-      <strong>Playtime Milestones</strong>
-      <small>${next ? `${Math.max(0, next.hours - totalHours)}h until ${next.title}` : "All tracked milestones unlocked"}</small>
-    </div>
-
-    <div class="milestone-list">
-      ${
-        featured.length
-          ? featured.map(milestone => `
-            <div class="milestone-pill unlocked">
-              <strong>${escapeHtml(milestone.title)}</strong>
-              <small>${milestone.hours}h</small>
-            </div>
-          `).join("")
-          : `<div class="milestone-pill"><strong>First steps</strong><small>${totalHours}/10h</small></div>`
-      }
-      ${next ? `
-        <div class="milestone-pill next">
-          <strong>${escapeHtml(next.title)}</strong>
-          <small>${totalHours}/${next.hours}h</small>
-        </div>
-      ` : ""}
-    </div>
-  `;
+  container.innerHTML = "";
+  container.classList.add("hidden");
 }
 
 function renderActivityFeed() {
@@ -2881,7 +2997,7 @@ function renderHome() {
   if (!game) {
     container.innerHTML = `
       <div class="empty-library">
-        No Steam games imported yet. If your library is missing, check that your Steam game details are public, then import again from Settings.
+        No games imported yet. Import Steam, Minecraft, or Epic Games from Settings to start building your vault.
       </div>
     `;
     return;
@@ -2946,7 +3062,7 @@ function renderLibrary() {
   if (!state.games.length) {
     grid.innerHTML = `
       <div class="empty-library">
-        No games imported yet. Steam may hide your library when your game details are private.
+        No games imported yet. Import Steam, Minecraft, or Epic Games from Settings. Steam may hide your Steam library when your game details are private.
       </div>
     `;
     return;
@@ -3122,7 +3238,7 @@ function renderGameDropdowns() {
 
   document.getElementById("goalsPanel").innerHTML =
     state.goals
-      .filter(goal => goal.gameId === game.id && !goal.done)
+      .filter(goal => String(goal.gameId) === String(game.id) && !goal.done)
       .map(goal => `<div class="list-item">Goal - ${goal.text}</div>`)
       .join("");
 }
@@ -3209,7 +3325,7 @@ function renderAchievementsLegacy() {
   if (!state.games.length) {
     container.innerHTML = `
       <div class="empty-library">
-        Import your Steam library first to see achievement progress here.
+        Import your Steam library first to see achievement progress here. Local launcher games can still appear in your Library, but achievements depend on Steam data.
       </div>
     `;
     return;
@@ -3293,7 +3409,7 @@ function renderAchievements() {
   if (!state.games.length) {
     container.innerHTML = `
       <div class="empty-library">
-        Import your Steam library first to see achievement progress here.
+        Import your Steam library first to see achievement progress here. Local launcher games can still appear in your Library, but achievements depend on Steam data.
       </div>
     `;
     return;
@@ -4105,7 +4221,7 @@ async function renderInsights() {
   if (!state.games.length) {
     container.innerHTML = `
       <div class="empty-library">
-        Import your Steam library first to build insights.
+        Import your libraries first to build insights. Steam provides the richest playtime and achievement data.
       </div>
     `;
     return;
@@ -4243,7 +4359,7 @@ function renderGoals() {
   }
 
   if (filter !== "all" && filter !== "global") {
-    visibleGoals = visibleGoals.filter(goal => goal.gameId === Number(filter));
+    visibleGoals = visibleGoals.filter(goal => String(goal.gameId) === String(filter));
   }
 
   if (!visibleGoals.length) {
@@ -4259,7 +4375,7 @@ function renderGoals() {
   const groups = {};
 
   visibleGoals.forEach(goal => {
-    const game = state.games.find(item => item.id === goal.gameId);
+    const game = findGameById(goal.gameId);
     const groupName = goal.gameId ? game?.name || "Missing game" : "Global";
 
     if (!groups[groupName]) {
@@ -4394,9 +4510,9 @@ function populateTrophyGames() {
 }
 
 function populateLegendaryAchievements() {
-  const gameId = Number(document.getElementById("trophyGame").value);
+  const gameId = document.getElementById("trophyGame").value;
   const achievementSelect = document.getElementById("trophyAchievement");
-  const game = state.games.find(item => item.id === gameId);
+  const game = findGameById(gameId);
 
   achievementSelect.innerHTML = "";
 
@@ -4471,7 +4587,7 @@ function updateTrophyForm() {
   if (type === "completed") {
     helper.textContent = "Choose from games you have completed. The trophy will generate itself.";
 
-    const game = state.games.find(item => item.id === Number(document.getElementById("trophyGame").value));
+    const game = findGameById(document.getElementById("trophyGame").value);
 
     if (game) {
       titleInput.value = `${game.name} Completed`;
@@ -4551,7 +4667,7 @@ function updateTrophyForm() {
   if (type === "favorite") {
     helper.textContent = "Choose a game you want to feature as one of your favorites.";
 
-    const game = state.games.find(item => item.id === Number(document.getElementById("trophyGame").value));
+    const game = findGameById(document.getElementById("trophyGame").value);
 
     if (game) {
       titleInput.value = "Favorite Game";
@@ -4586,8 +4702,8 @@ function updateTrophyForm() {
 
 function syncAutoTrophyFields() {
   const type = document.getElementById("trophyType").value;
-  const gameId = Number(document.getElementById("trophyGame").value);
-  const game = state.games.find(item => item.id === gameId);
+  const gameId = document.getElementById("trophyGame").value;
+  const game = findGameById(gameId);
 
   if (type === "genreSpecialist") {
     const specialist = getSelectedGenreSpecialist();
@@ -4721,7 +4837,7 @@ document.getElementById("addTrophyBtn").onclick = () => {
 
   if (!gameId) return;
 
-  const game = state.games.find(item => item.id === gameId);
+  const game = findGameById(gameId);
 
   if (!game) return;
 
@@ -4834,7 +4950,7 @@ document.getElementById("saveGoalBtn").onclick = () => {
   state.goals.push({
     text,
     done:false,
-    gameId:selected === "global" ? null : Number(selected)
+    gameId:selected === "global" ? null : selected
   });
 
   document.getElementById("modalGoalInput").value = "";
