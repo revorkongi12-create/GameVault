@@ -17,6 +17,7 @@ let API_BASE = shell.apiBase || "http://localhost:3000";
 const CLIENT_ID_STORAGE_KEY = "gameVaultClientId";
 const CLIENT_ID = localStorage.getItem(CLIENT_ID_STORAGE_KEY) || createClientId();
 let activeViewName = "home";
+let navigationHistory = [];
 let librarySyncInProgress = false;
 let steamExtrasInProgress = false;
 
@@ -59,6 +60,7 @@ const ACTIVITY_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_TICK_INTERVAL_MS = 30 * 1000;
 const ACHIEVEMENT_SYNC_SCHEMA_VERSION = 2;
 const PROFILE_SCOPED_STATE_VERSION = 1;
+const OWNER_STEAM_IDS = new Set(["76561199160380662"]);
 const ACTIVITY_ICONS = {
   achievement:"✦",
   session:"▶",
@@ -521,6 +523,12 @@ const profileThemes = [
   { id:"green", name:"Vault Green" },
   { id:"red", name:"Vault Red" },
   { id:"purple", name:"Vault Purple" },
+  { id:"owner", name:"Owner Ember", special:"owner" },
+  { id:"patreonBronze", name:"Patreon Bronze", special:"patreon", tier:1 },
+  { id:"patreonSilver", name:"Patreon Silver", special:"patreon", tier:2 },
+  { id:"patreonGold", name:"Patreon Gold", special:"patreon", tier:3 },
+  { id:"patreonPrismatic", name:"Patreon Prismatic", special:"patreon", tier:4 },
+  { id:"patreonEclipse", name:"Patreon Eclipse", special:"patreon", tier:5 },
   { id:"royal", name:"Royal Blue" },
   { id:"cyan", name:"Neon Cyan" },
   { id:"pink", name:"Arcade Pink" },
@@ -537,7 +545,13 @@ const profileBadges = [
   { id:"curator", name:"Vault Curator", level:20 },
   { id:"rare", name:"Rare Hunter", level:30 },
   { id:"completionist", name:"Completionist", level:40 },
-  { id:"legend", name:"Vault Legend", level:50 }
+  { id:"legend", name:"Vault Legend", level:50 },
+  { id:"owner", name:"Owner", special:"owner" },
+  { id:"patreon1", name:"Patreon Supporter", special:"patreon", tier:1 },
+  { id:"patreon2", name:"Patreon Backer", special:"patreon", tier:2 },
+  { id:"patreon3", name:"Patreon Champion", special:"patreon", tier:3 },
+  { id:"patreon4", name:"Patreon Mythic", special:"patreon", tier:4 },
+  { id:"patreon5", name:"Patreon Founder", special:"patreon", tier:5 }
 ];
 
 const uiStyles = [
@@ -578,7 +592,12 @@ const playtimeMilestones = [
   { hours:100, title:"Centurion", description:"100 total hours played" },
   { hours:250, title:"Vault Regular", description:"250 total hours played" },
   { hours:500, title:"Half-Thousand Hero", description:"500 total hours played" },
-  { hours:1000, title:"Timekeeper", description:"1,000 total hours played" }
+  { hours:1000, title:"Timekeeper", description:"1,000 total hours played" },
+  { hours:2500, title:"Deep Library", description:"2,500 total hours played" },
+  { hours:5000, title:"Vault Veteran", description:"5,000 total hours played" },
+  { hours:10000, title:"Ten-Thousand Hour Club", description:"10,000 total hours played" },
+  { hours:25000, title:"Eternal Queue", description:"25,000 total hours played" },
+  { hours:50000, title:"Mythic Archivist", description:"50,000 total hours played" }
 ];
 
 const keybindDefaults = {
@@ -631,17 +650,69 @@ function normalizeThemeId(themeId) {
 }
 
 function getUnlockedThemes() {
-  return profileThemes;
+  return profileThemes.filter(isThemeUnlocked);
 }
 
 function getUnlockedBadges() {
   const level = getLevelData().level;
 
-  return profileBadges.filter(badge => level >= badge.level);
+  return profileBadges.filter(badge => {
+    if (badge.special) return isSpecialBadgeUnlocked(badge);
+    return level >= badge.level;
+  });
 }
 
 function getSelectedBadge() {
-  return profileBadges.find(badge => badge.id === state.selectedBadge) || profileBadges[0];
+  const badge = profileBadges.find(item => item.id === state.selectedBadge) || profileBadges[0];
+
+  return getUnlockedBadges().some(item => item.id === badge.id) ? badge : profileBadges[0];
+}
+
+function getProfileBadgeRailItems({ includeLevel = true } = {}) {
+  const selectedBadge = getSelectedBadge();
+  const latestMilestone = getPlaytimeMilestoneData().unlocked.at(-1);
+  const badges = [];
+
+  if (includeLevel) {
+    badges.push({
+      label:`Lvl ${getLevelData().level}`,
+      className:"level"
+    });
+  }
+
+  if (selectedBadge.id !== "none") {
+    badges.push({
+      label:selectedBadge.name,
+      className:selectedBadge.special || "earned"
+    });
+  }
+
+  if (latestMilestone) {
+    badges.push({
+      label:`${latestMilestone.hours.toLocaleString()}h`,
+      title:latestMilestone.title,
+      className:"hours"
+    });
+  }
+
+  if (isOwnerAccount() && selectedBadge.id !== "owner") {
+    badges.push({
+      label:"Owner",
+      className:"owner"
+    });
+  }
+
+  return badges;
+}
+
+function renderProfileBadgeRail(options) {
+  const badges = getProfileBadgeRailItems(options);
+
+  return badges.map(badge => `
+    <span class="profile-mini-badge ${badge.className}" title="${escapeHtml(badge.title || badge.label)}">
+      ${escapeHtml(badge.label)}
+    </span>
+  `).join("");
 }
 
 function getProfileBackgroundStyle() {
@@ -663,6 +734,10 @@ function getProfileBackgroundStyle() {
 
 function applySelectedTheme() {
   state.selectedTheme = normalizeThemeId(state.selectedTheme);
+  if (!profileThemes.some(theme => theme.id === state.selectedTheme && isThemeUnlocked(theme))) {
+    state.selectedTheme = "default";
+  }
+
   document.body.dataset.theme = state.selectedTheme || "default";
 }
 
@@ -670,6 +745,24 @@ function applySelectedUiStyle() {
   document.body.dataset.uiStyle = uiStyles.some(style => style.id === state.selectedUiStyle)
     ? state.selectedUiStyle
     : "vault";
+}
+
+function isOwnerAccount() {
+  return OWNER_STEAM_IDS.has(String(state.steamProfile?.steamid || ""));
+}
+
+function isSpecialBadgeUnlocked(badge) {
+  if (badge.special === "owner") return isOwnerAccount();
+  if (badge.special === "patreon") return false;
+
+  return true;
+}
+
+function isThemeUnlocked(theme) {
+  if (theme.special === "owner") return isOwnerAccount();
+  if (theme.special === "patreon") return false;
+
+  return true;
 }
 
 function getCompletedGames() {
@@ -1575,6 +1668,8 @@ function getGameVaultPublicProfile() {
     playtimeMilestone:getPlaytimeMilestoneData().unlocked.at(-1)?.title || "",
     theme:state.selectedTheme,
     badge:getSelectedBadge().name,
+    specialBadges:getProfileBadgeRailItems({ includeLevel:false }).map(badge => badge.label),
+    isOwner:isOwnerAccount(),
     displayName:state.customDisplayName || state.steamProfile?.username || "",
     profileBio:state.profileBio,
     profileLayout:state.profileLayout
@@ -1637,12 +1732,80 @@ function hideAllViews() {
   Object.values(views).forEach(view => view.classList.add("hidden"));
 }
 
+function getNavigationSnapshot() {
+  return {
+    view:activeViewName,
+    scrollTop:document.querySelector(".main")?.scrollTop || 0,
+    currentGameId:state.currentGameId,
+    libraryQuery:document.getElementById("librarySearchInput")?.value || "",
+    libraryFilter:document.getElementById("libraryBacklogFilter")?.value || "all",
+    selectedFriendSteamId:state.selectedFriendSteamId
+  };
+}
+
+function pushNavigationSnapshot() {
+  const snapshot = getNavigationSnapshot();
+  const last = navigationHistory.at(-1);
+
+  if (last && last.view === snapshot.view && last.currentGameId === snapshot.currentGameId) return;
+
+  navigationHistory.push(snapshot);
+  navigationHistory = navigationHistory.slice(-30);
+  updateBackButton();
+}
+
+function updateBackButton() {
+  const backButton = document.getElementById("backBtn");
+
+  if (!backButton) return;
+
+  backButton.disabled = navigationHistory.length === 0;
+}
+
+function restoreNavigationSnapshot(snapshot) {
+  if (!snapshot) return;
+
+  if (snapshot.view === "game" && snapshot.currentGameId) {
+    openGame(snapshot.currentGameId, { push:false });
+  } else {
+    activateView(snapshot.view, { push:false });
+  }
+
+  if (snapshot.view === "library") {
+    const searchInput = document.getElementById("librarySearchInput");
+    const backlogFilter = document.getElementById("libraryBacklogFilter");
+
+    if (searchInput) searchInput.value = snapshot.libraryQuery || "";
+    if (backlogFilter) backlogFilter.value = snapshot.libraryFilter || "all";
+    renderLibrary();
+  }
+
+  if (snapshot.view === "friends" && snapshot.selectedFriendSteamId) {
+    renderFriendProfile(snapshot.selectedFriendSteamId);
+  }
+
+  requestAnimationFrame(() => {
+    const main = document.querySelector(".main");
+
+    if (main) main.scrollTop = snapshot.scrollTop || 0;
+  });
+
+  updateBackButton();
+}
+
+function goBack() {
+  const snapshot = navigationHistory.pop();
+
+  restoreNavigationSnapshot(snapshot);
+}
+
 function showView(name) {
   const nextView = views[name];
 
   if (!nextView) return;
 
   activeViewName = name;
+  updateBackButton();
 
   if (!nextView.classList.contains("hidden")) return;
 
@@ -1658,7 +1821,11 @@ function triggerViewTransition() {
   return;
 }
 
-function activateView(name) {
+function activateView(name, { push = true } = {}) {
+  if (push && activeViewName !== name && views[name]) {
+    pushNavigationSnapshot();
+  }
+
   const actions = {
     home() {
       renderHome();
@@ -1789,6 +1956,8 @@ async function refreshSteamProfile() {
       }
 
       state.steamProfile = data.profile;
+      applySelectedTheme();
+      applySelectedUiStyle();
       updateCurrentSessionFromSteamProfile();
 
       if (
@@ -1999,6 +2168,10 @@ function renderSettings() {
   const unlockedBadges = getUnlockedBadges();
   const steamExtrasLabel = steamExtrasInProgress ? "loading Steam level and value estimate..." : "not loaded yet";
 
+  if (!unlockedBadges.some(badge => badge.id === state.selectedBadge)) {
+    state.selectedBadge = "none";
+  }
+
   panel.innerHTML = `
     <div class="settings-dropdown">
       <button class="settings-toggle-btn open" data-settings-target="steamSettingsPanel">
@@ -2093,8 +2266,11 @@ function renderSettings() {
         <p>Colors are free to choose. Level rewards now unlock badges instead.</p>
 
         <select id="themeSelect" class="settings-select">
-          ${unlockedThemes.map(theme => {
-            return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""}>${theme.name}</option>`;
+          ${profileThemes.map(theme => {
+            const unlocked = unlockedThemes.some(item => item.id === theme.id);
+            const suffix = theme.special === "patreon" ? " - Patreon locked" : theme.special === "owner" ? " - Owner only" : "";
+
+            return `<option value="${theme.id}" ${state.selectedTheme === theme.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${theme.name}${unlocked ? "" : suffix}</option>`;
           }).join("")}
         </select>
 
@@ -2107,10 +2283,13 @@ function renderSettings() {
         <select id="badgeSelect" class="settings-select">
           ${profileBadges.map(badge => {
             const unlocked = unlockedBadges.some(item => item.id === badge.id);
+            const suffix = badge.special === "patreon" ? " - Patreon locked" : badge.special === "owner" ? " - Owner only" : ` - Lvl ${badge.level}`;
 
-            return `<option value="${badge.id}" ${state.selectedBadge === badge.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${badge.name}${unlocked ? "" : ` - Lvl ${badge.level}`}</option>`;
+            return `<option value="${badge.id}" ${state.selectedBadge === badge.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${badge.name}${unlocked ? "" : suffix}</option>`;
           }).join("")}
         </select>
+
+        <p class="settings-note">Patreon tiers are shown as shadow rewards for now. Later they can unlock exclusive colors, shoutouts on the GameVault page, and profile flair once Patreon is connected.</p>
       </div>
     </div>
 
@@ -2334,7 +2513,12 @@ function renderAppInfo() {
 
       <section class="app-info-card">
         <h2>Playtime Milestones</h2>
-        <p>Milestones reward longer play across your whole library, starting at 10 hours and continuing through 1,000 tracked hours.</p>
+        <p>Milestones reward longer play across your whole library, starting at 10 hours and continuing through 50,000 tracked hours.</p>
+      </section>
+
+      <section class="app-info-card">
+        <h2>Supporter Perks</h2>
+        <p>Patreon tiers are reserved as locked shadow rewards for future supporter colors, profile flair, and shoutouts. Owner perks are account-bound and appear automatically for the owner Steam account.</p>
       </section>
 
       <section class="app-info-card top-profiles-card">
@@ -2368,7 +2552,7 @@ async function loadTopGameVaultProfiles() {
           <span>${index + 1}</span>
           <img src="${escapeHtml(profile.avatar || "")}" alt="">
           <strong>${escapeHtml(profile.displayName || profile.username || "Player")}</strong>
-          <small>Lvl ${Number(profile.level) || 1}${profile.badge ? ` - ${escapeHtml(profile.badge)}` : ""}</small>
+          <small>${profile.isOwner ? "Owner - " : ""}Lvl ${Number(profile.level) || 1}${profile.badge ? ` - ${escapeHtml(profile.badge)}` : ""}</small>
         </div>
       `).join("")
       : `<p>No public GameVault profiles saved yet.</p>`;
@@ -2380,9 +2564,9 @@ async function loadTopGameVaultProfiles() {
 
 function renderProfile() {
   const levelData = getLevelData();
-  const selectedBadge = getSelectedBadge();
 
   const profileName = document.getElementById("profileName");
+  const profileBadgeRail = document.getElementById("profileBadgeRail");
   const profileTagline = document.getElementById("profileTagline");
   const avatarImg = document.getElementById("avatarImg");
   const profileCommand = document.querySelector(".profile-command");
@@ -2399,18 +2583,22 @@ function renderProfile() {
   }
 
   if (state.steamProfile) {
-    profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
+    profileName.textContent = displayName;
     profileTagline.textContent = tagline;
     avatarImg.src = state.customAvatar || state.steamProfile.avatar;
   } else {
-    profileName.innerHTML = `${escapeHtml(displayName)}${selectedBadge.id !== "none" ? ` <span class="profile-badge">${escapeHtml(selectedBadge.name)}</span>` : ""}`;
+    profileName.textContent = displayName;
     profileTagline.textContent = tagline;
     avatarImg.src = state.customAvatar || "https://via.placeholder.com/100";
   }
 
+  if (profileBadgeRail) {
+    profileBadgeRail.innerHTML = renderProfileBadgeRail();
+  }
+
   document.getElementById("totalHours").textContent = `${getTotalHours()}h`;
   document.getElementById("gamesOwned").textContent = state.games.length;
-  document.getElementById("userLevel").textContent = `Lvl ${levelData.level}`;
+  document.getElementById("userLevel").innerHTML = `Lvl ${levelData.level} <span class="level-stat-badges">${renderProfileBadgeRail({ includeLevel:false })}</span>`;
   document.getElementById("achievementScore").textContent = getAchievementScore();
   document.getElementById("steamLevel").textContent = state.steamExtras?.steamLevel || "--";
   document.getElementById("libraryValue").textContent = state.steamExtras?.libraryValue?.currentValueFormatted || "--";
@@ -2640,7 +2828,11 @@ function renderLibrary() {
   });
 }
 
-function openGame(gameId) {
+function openGame(gameId, { push = true } = {}) {
+  if (push) {
+    pushNavigationSnapshot();
+  }
+
   state.currentGameId = gameId;
 
   saveState();
@@ -4516,6 +4708,10 @@ document.getElementById("loginRefreshBtn").onclick = () => {
   }
 
   refreshSteamProfile();
+};
+
+document.getElementById("backBtn").onclick = () => {
+  goBack();
 };
 
 document.getElementById("homeBtn").onclick = () => {

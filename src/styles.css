@@ -43,6 +43,22 @@ body[data-theme="purple"]{
   --theme-glow:rgba(185,131,255,.22);
 }
 
+body[data-theme="owner"]{
+  --accent:#ffb347;
+  --accent2:#ff4d6d;
+  --theme-bg:#140705;
+  --theme-bg2:#2b1017;
+  --theme-glow:rgba(255,179,71,.28);
+}
+
+body[data-theme^="patreon"]{
+  --accent:#ff6f91;
+  --accent2:#9b5cff;
+  --theme-bg:#130718;
+  --theme-bg2:#261032;
+  --theme-glow:rgba(255,111,145,.22);
+}
+
 body[data-theme="royal"]{
   --accent:#4f7cff;
   --accent2:#b58cff;
@@ -254,6 +270,7 @@ button,
 .goal-done-btn,
 .steam-chat-btn,
 .steam-disconnect-btn,
+.back-btn,
 .quick-launch-item,
 .library-source{
   will-change:transform,filter;
@@ -275,6 +292,7 @@ button:active,
 .goal-done-btn:active,
 .steam-chat-btn:active,
 .steam-disconnect-btn:active,
+.back-btn:active,
 .quick-launch-item:active{
   transform:translateY(1px) scale(.985);
   filter:brightness(1.12) saturate(1.08);
@@ -329,6 +347,29 @@ button:active,
   height:34px;
   object-fit:contain;
   filter:drop-shadow(0 0 12px var(--theme-glow));
+}
+
+.back-btn{
+  border:1px solid color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,.1));
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:8px;
+  cursor:pointer;
+  text-align:left;
+  font-size:14px;
+  background:rgba(255,255,255,.055);
+  margin-bottom:8px;
+}
+
+.back-btn:not(:disabled):hover{
+  transform:translateX(-3px);
+  background:color-mix(in srgb, var(--accent) 20%, rgba(255,255,255,.08));
+  box-shadow:0 0 16px var(--theme-glow);
+}
+
+.back-btn:disabled{
+  cursor:not-allowed;
+  opacity:.42;
 }
 
 .nav-btn{
@@ -547,6 +588,60 @@ button:active,
   font-size:12px;
   font-weight:900;
   box-shadow:0 0 16px var(--theme-glow);
+}
+
+.profile-badge-rail,
+.level-stat-badges{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+}
+
+.profile-badge-rail{
+  margin:4px 0 6px;
+}
+
+.level-stat-badges{
+  justify-content:center;
+  margin-top:6px;
+}
+
+.profile-mini-badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.13);
+  background:rgba(255,255,255,.09);
+  color:var(--text);
+  font-size:11px;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.profile-mini-badge.level{
+  color:#111;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+}
+
+.profile-mini-badge.hours{
+  border-color:rgba(102,192,244,.35);
+  background:rgba(102,192,244,.14);
+}
+
+.profile-mini-badge.owner{
+  color:#180808;
+  border-color:rgba(255,179,71,.48);
+  background:linear-gradient(135deg,#ffb347,#ff4d6d);
+  box-shadow:0 0 18px rgba(255,179,71,.26);
+}
+
+.profile-mini-badge.patreon{
+  border-color:rgba(255,111,145,.35);
+  background:linear-gradient(135deg,rgba(255,111,145,.22),rgba(155,92,255,.18));
 }
 
 .profile-identity p{
@@ -1035,6 +1130,12 @@ button:active,
 .settings-panel .settings-select,
 .settings-panel .settings-input{
   max-width:none;
+}
+
+.settings-note{
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
 }
 
 .keybind-grid{

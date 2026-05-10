@@ -17,6 +17,7 @@ const STEAM_RETURN_URL = process.env.STEAM_RETURN_URL;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "*";
 const DEFAULT_CLIENT_ID = "local";
 const PROFILE_STORE_VERSION = 2;
+const OWNER_STEAM_IDS = new Set(["76561199160380662"]);
 
 const steamSchemaCache = new Map();
 const steamAppDetailsCache = new Map();
@@ -470,6 +471,8 @@ app.post("/api/gamevault/profile", (req, res) => {
   const level = Number(req.body?.level) || 1;
   const xp = Number(req.body?.xp) || 0;
 
+  const isOwner = OWNER_STEAM_IDS.has(String(steamProfile.steamid));
+
   gameVaultProfiles.set(steamProfile.steamid, {
     steamid:steamProfile.steamid,
     username:steamProfile.username,
@@ -486,6 +489,10 @@ app.post("/api/gamevault/profile", (req, res) => {
     playtimeMilestone:String(req.body?.playtimeMilestone || ""),
     theme:String(req.body?.theme || "default"),
     badge:String(req.body?.badge || ""),
+    specialBadges:Array.isArray(req.body?.specialBadges)
+      ? req.body.specialBadges.slice(0, 8).map(badge => String(badge || "")).filter(Boolean)
+      : [],
+    isOwner,
     displayName:String(req.body?.displayName || steamProfile.username),
     profileBio:String(req.body?.profileBio || ""),
     profileLayout:String(req.body?.profileLayout || "hero"),
@@ -499,6 +506,7 @@ app.post("/api/gamevault/profile", (req, res) => {
 app.get("/api/gamevault/top-profiles", (req, res) => {
   const profiles = [...gameVaultProfiles.values()]
     .sort((a, b) => {
+      if (Boolean(b.isOwner) !== Boolean(a.isOwner)) return Number(Boolean(b.isOwner)) - Number(Boolean(a.isOwner));
       if ((b.level || 0) !== (a.level || 0)) return (b.level || 0) - (a.level || 0);
       return (b.xp || 0) - (a.xp || 0);
     })
